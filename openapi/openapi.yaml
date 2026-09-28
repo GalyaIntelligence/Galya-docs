@@ -1,0 +1,798 @@
+openapi: 3.1.0
+info:
+  title: Galya API
+  version: 0.1.0
+  description: |
+    Cloudflare Workers API for indexing entities, linking taste history, and composing user state vectors.
+
+    Workspace routes require a workspace API key (`galya_sk_...`) via `X-API-Key` or `Authorization: Bearer`.
+    Admin routes require `X-Galya-Admin-Key` or Bearer with the admin secret.
+servers:
+  - url: https://dev.api.galya.io
+    description: Development
+  - url: https://galya-api.galya-intelligence.workers.dev
+    description: Production (workers.dev until custom domain cutover)
+tags:
+  - name: meta
+    description: Service metadata and health
+  - name: admin
+    description: Workspace provisioning (admin only)
+  - name: core
+    description: Entity index, read, and link operations
+paths:
+  /:
+    get:
+      tags: [meta]
+      operationId: getRoot
+      summary: Service info
+      security: []
+      responses:
+        "200":
+          description: Service metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RootResponse"
+      x-codeSamples:
+        - lang: typescript
+          label: getRoot
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.meta.getRoot();
+
+              console.log(result);
+            }
+
+            run();
+  /health:
+    get:
+      tags: [meta]
+      operationId: getHealth
+      summary: Database and schema health
+      security: []
+      responses:
+        "200":
+          description: Database reachable and schema ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponseReady"
+        "503":
+          description: Database down or schema missing
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/HealthResponseDown"
+                  - $ref: "#/components/schemas/HealthResponseSchemaMissing"
+      x-codeSamples:
+        - lang: typescript
+          label: getHealth
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.meta.getHealth();
+
+              console.log(result);
+            }
+
+            run();
+  /v1/admin/workspaces:
+    get:
+      tags: [admin]
+      operationId: listWorkspaces
+      summary: List workspaces
+      security:
+        - AdminKey: []
+        - AdminBearer: []
+      responses:
+        "200":
+          description: Workspace list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceListResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedAdmin"
+        "503":
+          $ref: "#/components/responses/AdminNotConfigured"
+      x-codeSamples:
+        - lang: typescript
+          label: listWorkspaces
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.admin.listWorkspaces({
+                adminKey: process.env["GALYA_ADMIN_KEY"] ?? "",
+              });
+
+              console.log(result);
+            }
+
+            run();
+    post:
+      tags: [admin]
+      operationId: createWorkspace
+      summary: Create a workspace and default API key
+      security:
+        - AdminKey: []
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkspaceRequest"
+      responses:
+        "201":
+          description: Workspace created; API key shown once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateWorkspaceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/UnauthorizedAdmin"
+        "409":
+          description: Workspace id already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+              example:
+                error: workspace_exists
+                message: Workspace id already exists
+        "503":
+          $ref: "#/components/responses/AdminNotConfigured"
+      x-codeSamples:
+        - lang: typescript
+          label: createWorkspace
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.admin.createWorkspace({
+                adminKey: process.env["GALYA_ADMIN_KEY"] ?? "",
+              }, {});
+
+              console.log(result);
+            }
+
+            run();
+  /v1/admin/workspaces/{workspaceId}:
+    get:
+      tags: [admin]
+      operationId: getWorkspace
+      summary: Get a workspace by public id
+      security:
+        - AdminKey: []
+        - AdminBearer: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceIdPath"
+      responses:
+        "200":
+          description: Workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSingleResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedAdmin"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AdminNotConfigured"
+      x-codeSamples:
+        - lang: typescript
+          label: getWorkspace
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.admin.getWorkspace({
+                adminKey: process.env["GALYA_ADMIN_KEY"] ?? "",
+              }, {
+                workspaceId: "<id>",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/index:
+    post:
+      tags: [core]
+      operationId: indexEntity
+      summary: Upsert an entity and optional embedding
+      description: Same behavior as `POST /v1/entity`.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IndexEntityRequest"
+      responses:
+        "201":
+          description: Entity upserted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IndexEntityResponse"
+        "400":
+          description: Invalid JSON or embedding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+        "500":
+          $ref: "#/components/responses/InternalError"
+      x-codeSamples:
+        - lang: typescript
+          label: indexEntity
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.indexEntity({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                body: {},
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/entity:
+    post:
+      tags: [core]
+      operationId: upsertEntity
+      summary: Upsert an entity and optional embedding
+      description: Alias of `POST /v1/index`.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IndexEntityRequest"
+      responses:
+        "201":
+          description: Entity upserted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IndexEntityResponse"
+        "400":
+          description: Invalid JSON or embedding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+        "500":
+          $ref: "#/components/responses/InternalError"
+      x-codeSamples:
+        - lang: typescript
+          label: upsertEntity
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.upsertEntity({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                body: {},
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/entity/{entityId}:
+    get:
+      tags: [core]
+      operationId: getEntity
+      summary: Get an entity by public id
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - $ref: "#/components/parameters/EntityIdPath"
+      responses:
+        "200":
+          description: Entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntitySingleResponse"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      x-codeSamples:
+        - lang: typescript
+          label: getEntity
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.getEntity({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                entityId: "<id>",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/entity/{parentId}/link:
+    post:
+      tags: [core]
+      operationId: linkEntity
+      summary: Link a child entity to a parent and refresh user state
+      description: |
+        Creates the parent user entity if missing. Requires the child entity to exist.
+        Refreshes the parent's composed state vector in Turbopuffer when linking succeeds.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - name: parentId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Parent entity public id (often a user id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkEntityRequest"
+      responses:
+        "200":
+          description: Link recorded and state composition attempted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkEntityResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+        "404":
+          description: Child entity not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      x-codeSamples:
+        - lang: typescript
+          label: linkEntity
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.linkEntity({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                parentId: "<id>",
+                body: {},
+              });
+
+              console.log(result);
+            }
+
+            run();
+components:
+  securitySchemes:
+    AdminKey:
+      type: apiKey
+      in: header
+      name: X-Galya-Admin-Key
+    AdminBearer:
+      type: http
+      scheme: bearer
+      description: Admin secret as Bearer token (same value as X-Galya-Admin-Key)
+    WorkspaceApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    WorkspaceBearer:
+      type: http
+      scheme: bearer
+      description: Workspace API key (`galya_sk_...`) as Bearer token
+  parameters:
+    WorkspaceIdPath:
+      name: workspaceId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^wsp_[a-zA-Z0-9_-]+$
+    EntityIdPath:
+      name: entityId
+      in: path
+      required: true
+      schema:
+        type: string
+    OptionalWorkspaceHeader:
+      name: X-Galya-Workspace-Id
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Must match the workspace that owns the API key when set
+  responses:
+    BadRequest:
+      description: Invalid request body
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    UnauthorizedAdmin:
+      description: Admin credentials invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            error: unauthorized
+            message: Admin credentials are invalid
+    AdminNotConfigured:
+      description: ADMIN_API_KEY not configured on the Worker
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            error: admin_not_configured
+            message: ADMIN_API_KEY is not configured
+    MissingOrInvalidApiKey:
+      description: Missing or invalid workspace API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    WorkspaceMismatch:
+      description: X-Galya-Workspace-Id does not match the key's workspace
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            error: workspace_mismatch
+            message: API key does not belong to this workspace
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+  schemas:
+    ErrorBody:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+    RootResponse:
+      type: object
+      required: [service, environment, ok]
+      properties:
+        service:
+          type: string
+          const: galya-api
+        environment:
+          type: string
+        ok:
+          type: boolean
+    HealthResponseReady:
+      type: object
+      required: [ok, db, schema]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        db:
+          type: string
+          const: up
+        schema:
+          type: string
+          enum: [ready]
+    HealthResponseSchemaMissing:
+      type: object
+      required: [ok, db, schema]
+      properties:
+        ok:
+          type: boolean
+          const: false
+        db:
+          type: string
+          const: up
+        schema:
+          type: string
+          const: missing
+    HealthResponseDown:
+      type: object
+      required: [ok, db, error]
+      properties:
+        ok:
+          type: boolean
+          const: false
+        db:
+          type: string
+          const: down
+        error:
+          type: string
+    WorkspaceSummary:
+      type: object
+      required: [id, name, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, paused]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorkspaceListResponse:
+      type: object
+      required: [workspaces]
+      properties:
+        workspaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceSummary"
+    WorkspaceSingleResponse:
+      type: object
+      required: [workspace]
+      properties:
+        workspace:
+          $ref: "#/components/schemas/WorkspaceSummary"
+    CreateWorkspaceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Human-readable workspace name
+        id:
+          type: string
+          pattern: ^wsp_[a-zA-Z0-9_-]{3,80}$
+          description: Optional public workspace id; generated if omitted
+    CreateWorkspaceResponse:
+      type: object
+      required: [workspace, api_key, warning]
+      properties:
+        workspace:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+        api_key:
+          type: string
+          description: Workspace secret; shown once
+        warning:
+          type: string
+    IndexEntityRequest:
+      type: object
+      properties:
+        entity_id:
+          type: string
+          description: Public entity id; alias `id`
+        id:
+          type: string
+        type:
+          type: string
+          default: content
+        domain:
+          type: string
+        name:
+          type: string
+        content:
+          type: string
+        source_url:
+          type: string
+          format: uri
+        url:
+          type: string
+          format: uri
+          description: Alias of source_url
+        metadata:
+          type: object
+          additionalProperties: true
+        embedding:
+          type: array
+          minItems: 1024
+          maxItems: 1024
+          items:
+            type: number
+          description: Exactly 1024 finite numbers when provided
+        embedding_model:
+          type: string
+    IndexEntityPublic:
+      type: object
+      required: [id, type, domain, name, metadata]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        domain:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+    IndexEntityResponse:
+      type: object
+      required: [entity, vector_indexed]
+      properties:
+        entity:
+          $ref: "#/components/schemas/IndexEntityPublic"
+        vector_indexed:
+          type: boolean
+    EntityDetail:
+      type: object
+      required:
+        - id
+        - type
+        - domain
+        - name
+        - content
+        - source_url
+        - metadata
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        domain:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        content:
+          type: string
+          nullable: true
+        source_url:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    EntitySingleResponse:
+      type: object
+      required: [entity]
+      properties:
+        entity:
+          $ref: "#/components/schemas/EntityDetail"
+    LinkEntityRequest:
+      type: object
+      properties:
+        content_id:
+          type: string
+          description: Child entity id; aliases child_id, entity_id
+        child_id:
+          type: string
+        entity_id:
+          type: string
+        relation:
+          type: string
+          default: about
+        weight:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 1
+    LinkStateReady:
+      type: object
+      required: [status, history_count]
+      properties:
+        status:
+          type: string
+          const: ready
+        history_count:
+          type: integer
+          minimum: 0
+    LinkStatePending:
+      type: object
+      required: [status, reason]
+      properties:
+        status:
+          type: string
+          const: pending
+        reason:
+          type: string
+    LinkEntityResponse:
+      type: object
+      required: [parent_id, child_id, relation, weight, state]
+      properties:
+        parent_id:
+          type: string
+        child_id:
+          type: string
+        relation:
+          type: string
+        weight:
+          type: number
+        state:
+          oneOf:
+            - $ref: "#/components/schemas/LinkStateReady"
+            - $ref: "#/components/schemas/LinkStatePending"
