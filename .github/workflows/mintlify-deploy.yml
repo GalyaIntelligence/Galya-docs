@@ -56,13 +56,14 @@ jobs:
 
       - name: Commit Speakeasy-generated OpenAPI
         run: |
-          if git diff --quiet openapi docs.json; then
+          git add openapi/openapi.yaml openapi/openapi.json docs.json 2>/dev/null || true
+          git add openapi docs.json
+          if git diff --staged --quiet; then
             echo "No OpenAPI changes from Speakeasy"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add openapi docs.json
           git commit -m "docs(mintlify): pull Speakeasy combined spec @${{ inputs.docs_tag }}"
           git push
 
@@ -70,11 +71,13 @@ jobs:
         id: mint
         env:
           DOCS_TAG: ${{ inputs.docs_tag }}
+          MINTLIFY_PROJECT_ID_DEV: ${{ vars.MINTLIFY_PROJECT_ID_DEV || secrets.MINTLIFY_PROJECT_ID_DEV }}
+          MINTLIFY_PROJECT_ID_PROD: ${{ vars.MINTLIFY_PROJECT_ID_PROD || secrets.MINTLIFY_PROJECT_ID_PROD }}
         run: |
           if [ "$DOCS_TAG" = "dev" ]; then
-            echo "project_id=${{ vars.MINTLIFY_PROJECT_ID_DEV }}" >> "$GITHUB_OUTPUT"
+            echo "project_id=${MINTLIFY_PROJECT_ID_DEV}" >> "$GITHUB_OUTPUT"
           else
-            echo "project_id=${{ vars.MINTLIFY_PROJECT_ID_PROD }}" >> "$GITHUB_OUTPUT"
+            echo "project_id=${MINTLIFY_PROJECT_ID_PROD}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Trigger Mintlify deployment
