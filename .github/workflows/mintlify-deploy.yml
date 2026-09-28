@@ -36,16 +36,20 @@ jobs:
           SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
         run: |
           set -euo pipefail
-          mkdir -p openapi
+          pull_root=$(mktemp -d)
           speakeasy pull \
             --spec=galya-api-with-code-samples \
             --revision="${{ inputs.docs_tag }}" \
-            --output-dir=openapi
-          if [ -f openapi/bundle/openapi.yaml ]; then
-            cp openapi/bundle/openapi.yaml openapi/openapi.yaml
-          elif [ -f openapi/bundle/openapi.json ]; then
-            cp openapi/bundle/openapi.json openapi/openapi.json
+            --output-dir="$pull_root"
+          mkdir -p openapi
+          bundle_yaml=$(find "$pull_root" -path '*/bundle/openapi.yaml' -print -quit)
+          bundle_json=$(find "$pull_root" -path '*/bundle/openapi.json' -print -quit)
+          if [ -n "$bundle_yaml" ]; then
+            cp "$bundle_yaml" openapi/openapi.yaml
+          elif [ -n "$bundle_json" ]; then
+            cp "$bundle_json" openapi/openapi.json
           fi
+          rm -rf "$pull_root"
           test -f openapi/openapi.yaml || test -f openapi/openapi.json
           chmod +x scripts/validate-mintlify-speakeasy-openapi.sh
           ./scripts/validate-mintlify-speakeasy-openapi.sh
