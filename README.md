@@ -31,3 +31,7 @@ gh workflow run mintlify-deploy.yml -R GalyaIntelligence/Galya-docs \
 ```
 
 Enable **Public** on the combined spec in the Speakeasy Dashboard so Mintlify can fetch it.
+
+## galya.io/docs
+
+Mintlify base path **`/docs`** is configured in the Mintlify dashboard (Host at). Cloudflare Worker proxy: `cloudflare/mintlify-proxy/`. See [COORDINATION.md](./COORDINATION.md) and [docs/domain-setup-galya-io.md](./docs/domain-setup-galya-io.md).

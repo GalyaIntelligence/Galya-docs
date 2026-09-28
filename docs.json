@@ -2,6 +2,11 @@
   "$schema": "https://mintlify.com/docs.json",
   "name": "Galya API",
   "theme": "mint",
+  "seo": {
+    "metatags": {
+      "canonical": "https://galya.io/docs"
+    }
+  },
   "colors": {
     "primary": "#0D9373",
     "light": "#55D799",

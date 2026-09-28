@@ -1,0 +1,27 @@
+name: Deploy docs Cloudflare proxy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "cloudflare/mintlify-proxy/**"
+      - ".github/workflows/deploy-docs-proxy.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Wrangler deploy (galya.io/docs proxy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloudflare/mintlify-proxy
+          command: deploy

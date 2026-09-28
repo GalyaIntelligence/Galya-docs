@@ -1,0 +1,38 @@
+# Deploy: see .github/workflows/deploy-docs-proxy.yml or:
+#   cd cloudflare/mintlify-proxy && npx wrangler deploy
+#
+# Requires Cloudflare API token (GitHub secret CLOUDFLARE_API_TOKEN) with
+# Workers Scripts edit + Zone read. Set zone_name to the galya.io zone.
+
+name = "galya-mintlify-docs-proxy"
+main = "src/worker.js"
+compatibility_date = "2024-09-23"
+
+[vars]
+MINTLIFY_SUBDOMAIN = "galya.mintlify.site"
+CUSTOM_DOMAIN = "galya.io"
+DOCS_BASE_PATH = "/docs"
+
+[[routes]]
+pattern = "galya.io/docs*"
+zone_name = "galya.io"
+
+[[routes]]
+pattern = "galya.io/mintlify-assets/*"
+zone_name = "galya.io"
+
+[[routes]]
+pattern = "galya.io/_mintlify/*"
+zone_name = "galya.io"
+
+[[routes]]
+pattern = "www.galya.io/docs*"
+zone_name = "galya.io"
+
+[[routes]]
+pattern = "www.galya.io/mintlify-assets/*"
+zone_name = "galya.io"
+
+[[routes]]
+pattern = "www.galya.io/_mintlify/*"
+zone_name = "galya.io"
