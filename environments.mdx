@@ -1,0 +1,16 @@
+---
+title: Environments
+description: Development and production API bases.
+---
+
+| Environment | API branch | Base URL |
+|-------------|------------|----------|
+| Development | `dev` | `https://dev.api.galya.io` |
+| Production | `main` | Production workers.dev / custom domain |
+
+| Mintlify (this repo) | Git branch | Speakeasy combined spec tag |
+|----------------------|------------|-----------------------------|
+| Production | `main` | `@latest` |
+| Development | `dev` | `@dev` |
+
+CI on private `galya-api-new` publishes OpenAPI to Speakeasy; workflows here sync the registry URL in [`docs.json`](docs.json) and trigger Mintlify.

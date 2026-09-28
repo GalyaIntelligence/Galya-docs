@@ -1,0 +1,20 @@
+---
+title: Introduction
+description: Galya API for indexing entities, linking taste history, and composing user state vectors.
+---
+
+Galya is a Cloudflare Workers API backed by Postgres (Hyperdrive) and Turbopuffer for 1024-dimensional vectors.
+
+The **API implementation** lives in the private [`galya-api-new`](https://github.com/GalyaIntelligence/galya-api-new) repository. **This public repo** hosts Mintlify guides and points API reference at Speakeasy’s registry.
+
+## Primitives
+
+1. **Index** — Upsert a content entity and optional embedding (`POST /v1/index`).
+2. **Link** — Attach indexed content to a user (parent) entity and refresh composed state (`POST /v1/entity/{parentId}/link`).
+3. **Read** — Fetch entity metadata (`GET /v1/entity/{entityId}`).
+
+Workspace provisioning uses admin routes under `/v1/admin/*`.
+
+## API reference (Speakeasy → Mintlify)
+
+The **API reference** tab loads OpenAPI from the Speakeasy combined document `galya-api-with-code-samples` (base contract + TypeScript SDK code samples). Private API CI publishes updates to the registry; this repo’s CI syncs [`docs.json`](docs.json) and redeploys Mintlify.

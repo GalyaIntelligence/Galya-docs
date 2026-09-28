@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Speakeasy OpenAPI URL in docs.json
+        run: |
+          chmod +x scripts/validate-mintlify-speakeasy-openapi.sh
+          ./scripts/validate-mintlify-speakeasy-openapi.sh

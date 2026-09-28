@@ -1,0 +1,70 @@
+name: Mintlify Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      docs_tag:
+        description: "Speakeasy registry tag (dev or latest)"
+        required: true
+        default: latest
+        type: string
+      git_ref:
+        description: "Branch to sync docs.json on"
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    name: Sync Speakeasy OpenAPI URL and deploy Mintlify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref || github.ref_name }}
+
+      - name: Point docs.json at Speakeasy combined spec
+        run: |
+          chmod +x scripts/sync-mintlify-speakeasy-openapi.sh scripts/validate-mintlify-speakeasy-openapi.sh
+          ./scripts/sync-mintlify-speakeasy-openapi.sh "${{ inputs.docs_tag }}"
+          ./scripts/validate-mintlify-speakeasy-openapi.sh
+
+      - name: Commit docs.json Speakeasy URL sync
+        run: |
+          if git diff --quiet docs.json; then
+            echo "docs.json already references Speakeasy combined spec for tag ${{ inputs.docs_tag }}"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs.json
+          git commit -m "docs(mintlify): sync API reference to Speakeasy combined spec @${{ inputs.docs_tag }}"
+          git push
+
+      - name: Resolve Mintlify project
+        id: mint
+        env:
+          DOCS_TAG: ${{ inputs.docs_tag }}
+        run: |
+          if [ "$DOCS_TAG" = "dev" ]; then
+            echo "project_id=${{ vars.MINTLIFY_PROJECT_ID_DEV }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "project_id=${{ vars.MINTLIFY_PROJECT_ID_PROD }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger Mintlify deployment
+        if: steps.mint.outputs.project_id != ''
+        env:
+          MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
+          PROJECT_ID: ${{ steps.mint.outputs.project_id }}
+        run: |
+          curl -fsS -X POST "https://api.mintlify.com/v1/project/update/${PROJECT_ID}" \
+            -H "Authorization: Bearer ${MINTLIFY_API_KEY}"
+
+      - name: Mintlify project not configured
+        if: steps.mint.outputs.project_id == ''
+        run: |
+          echo "Set MINTLIFY_PROJECT_ID_PROD / MINTLIFY_PROJECT_ID_DEV on Galya-docs and MINTLIFY_API_KEY secret."

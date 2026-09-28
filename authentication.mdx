@@ -1,0 +1,22 @@
+---
+title: Authentication
+description: Workspace API keys and admin credentials.
+---
+
+## Workspace routes
+
+Send a workspace secret (`galya_sk_...`) on every `/v1/*` request (except unauthenticated meta routes):
+
+- Header: `X-API-Key: galya_sk_...`
+- Or: `Authorization: Bearer galya_sk_...`
+
+Optional header `X-Galya-Workspace-Id` must match the workspace that owns the key; otherwise the API returns `403 workspace_mismatch`.
+
+## Admin routes
+
+Admin routes under `/v1/admin/*` require:
+
+- Header: `X-Galya-Admin-Key: <ADMIN_API_KEY>`
+- Or the same value as a Bearer token
+
+The admin key is configured as the Worker secret `ADMIN_API_KEY`, not per-workspace.
