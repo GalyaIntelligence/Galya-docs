@@ -41,8 +41,10 @@ jobs:
             --spec=galya-api-with-code-samples \
             --revision="${{ inputs.docs_tag }}" \
             --output-dir=openapi
-          if [ ! -f openapi/openapi.yaml ] && [ -f openapi/openapi.json ]; then
-            echo "Speakeasy returned openapi.json only"
+          if [ -f openapi/bundle/openapi.yaml ]; then
+            cp openapi/bundle/openapi.yaml openapi/openapi.yaml
+          elif [ -f openapi/bundle/openapi.json ]; then
+            cp openapi/bundle/openapi.json openapi/openapi.json
           fi
           test -f openapi/openapi.yaml || test -f openapi/openapi.json
           chmod +x scripts/validate-mintlify-speakeasy-openapi.sh
