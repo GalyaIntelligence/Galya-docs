@@ -21,7 +21,7 @@
       },
       {
         "tab": "API reference",
-        "openapi": "https://registry.speakeasy.com/GalyaIntelligence/GalyaIntelligence/galya-api-with-code-samples@latest"
+        "openapi": "/openapi/openapi.yaml"
       }
     ]
   },

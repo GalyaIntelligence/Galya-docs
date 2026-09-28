@@ -17,4 +17,4 @@ Workspace provisioning uses admin routes under `/v1/admin/*`.
 
 ## API reference (Speakeasy → Mintlify)
 
-The **API reference** tab loads OpenAPI from the Speakeasy combined document `galya-api-with-code-samples` (base contract + TypeScript SDK code samples). Private API CI publishes updates to the registry; this repo’s CI syncs [`docs.json`](docs.json) and redeploys Mintlify.
+The **API reference** tab uses **`openapi/openapi.yaml` in this repo**, which CI refreshes with `speakeasy pull` from the combined registry document `galya-api-with-code-samples` (base contract + TypeScript SDK code samples). No Speakeasy dashboard “Integrations” are required—only the CLI and `SPEAKEASY_API_KEY`.

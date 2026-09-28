@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate Speakeasy OpenAPI URL in docs.json
+      - name: Validate docs.json points at Speakeasy-pulled OpenAPI path
         run: |
           chmod +x scripts/validate-mintlify-speakeasy-openapi.sh
-          ./scripts/validate-mintlify-speakeasy-openapi.sh
+          CI_VALIDATE_DOCS_JSON_ONLY=true ./scripts/validate-mintlify-speakeasy-openapi.sh

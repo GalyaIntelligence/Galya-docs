@@ -3,7 +3,7 @@
 Public [Mintlify](https://mintlify.com) site for the Galya API.
 
 - **Guides** — MDX in this repo  
-- **API reference** — Speakeasy combined OpenAPI (`galya-api-with-code-samples`) from the private [`galya-api-new`](https://github.com/GalyaIntelligence/galya-api-new) CI pipeline  
+- **API reference** — `openapi/openapi.yaml` pulled from Speakeasy registry (`galya-api-with-code-samples`) after private [`galya-api-new`](https://github.com/GalyaIntelligence/galya-api-new) CI publishes  
 
 ## Connect Mintlify
 
@@ -14,6 +14,7 @@ Public [Mintlify](https://mintlify.com) site for the Galya API.
 
 | Name | Kind |
 |------|------|
+| `SPEAKEASY_API_KEY` | Secret (pull combined spec from registry) |
 | `MINTLIFY_API_KEY` | Secret |
 | `MINTLIFY_PROJECT_ID_PROD` | Variable |
 | `MINTLIFY_PROJECT_ID_DEV` | Variable |
