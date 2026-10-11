@@ -1,20 +1,32 @@
 ---
 title: Introduction
-description: Galya API for indexing entities, linking taste history, and composing user state vectors.
+description: Index a catalog, link what people engage with, and query taste from the dashboard or the API.
 ---
 
-Galya is a Cloudflare Workers API backed by Postgres (Hyperdrive) and Turbopuffer for 1024-dimensional vectors.
+Galya keeps a catalog of things you can recommend, a record of who engaged with them, and a way to query that taste. You do this in a workspace. The [dashboard](https://app.galya.io) is where you watch the catalog and copy keys. The API is how your app writes and queries it.
 
-The **API implementation** lives in the private [`galya-api-new`](https://github.com/GalyaIntelligence/galya-api-new) repository. **This public repo** hosts Mintlify guides and points API reference at Speakeasy’s registry.
+The interactive examples in these docs send requests to the [development API](/development-api).
 
-## Primitives
+## What you work with
 
-1. **Index** — Upsert a content entity and optional embedding (`POST /v1/index`).
-2. **Link** — Attach indexed content to a user (parent) entity and refresh composed state (`POST /v1/entity/{parentId}/link`).
-3. **Read** — Fetch entity metadata (`GET /v1/entity/{entityId}`).
+| Module | What it is | Where you see it |
+| --- | --- | --- |
+| Entities | People, products, brands, and other things you score | [People](https://app.galya.io/people) and [Catalog](https://app.galya.io/catalog) |
+| Contents | The text or media attached to an entity | Catalog, after you index |
+| Links | A record that one entity is about another | Built on [Get started](https://app.galya.io/get-started), then visible as taste on People |
+| Query | Search, recommend, and rerank | Get started, step “Query taste” |
+| Models | How a query scores the catalog | Chosen on the request; results show on Overview and Catalog |
+| Audience types | Groups of people with similar taste | [Audience types](https://app.galya.io/audience-types) |
+| Agentic search | Let an outside agent query under a policy you set | API |
+| Connectors | Bring a catalog in from a source you connect | Lands in Catalog |
 
-Workspace provisioning uses admin routes under `/v1/admin/*`.
+## A first loop
 
-## API reference (Speakeasy → Mintlify)
+1. Open [Get started](https://app.galya.io/get-started) and copy the workspace secret from **Copy your workspace keys**.
+2. Index one catalog item and create a person. See [Quickstart](/quickstart).
+3. Link that person to the item, then search or recommend.
+4. Open [Catalog](https://app.galya.io/catalog) and [People](https://app.galya.io/people) to see what landed.
 
-The **API reference** tab uses **`openapi/openapi.yaml` in this repo**, which CI refreshes with `speakeasy pull` from the combined registry document `galya-api-with-code-samples` (base contract + TypeScript SDK code samples). No Speakeasy dashboard “Integrations” are required—only the CLI and `SPEAKEASY_API_KEY`.
+<Card title="Dashboard map" icon="table" href="/dashboard">
+  Which sidebar page matches which API module.
+</Card>

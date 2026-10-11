@@ -1,0 +1,32 @@
+---
+title: Rerank
+description: Reorder a list of entity ids for one person.
+api: "POST /v1/rerank"
+---
+
+You pass the candidates. Galya returns them ordered for that person. Use this when the shortlist already came from your own search.
+
+This playground posts to `https://dev.api.galya.io/v1/rerank`.
+
+<ParamField body="user_id" type="string" required>
+  Person to order the list for.
+</ParamField>
+
+<ParamField body="candidate_ids" type="string[]" required>
+  Entity ids to reorder. They must belong to this workspace.
+</ParamField>
+
+<ParamField body="model_id" type="string" default="cosine-rank-v1">
+  Scoring model. See [Models](/guides/models).
+</ParamField>
+
+<RequestExample>
+
+```bash
+curl https://dev.api.galya.io/v1/rerank \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"user_demo","candidate_ids":["sku_crew"]}'
+```
+
+</RequestExample>

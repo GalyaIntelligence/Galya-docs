@@ -1,0 +1,30 @@
+---
+title: Dashboard
+description: Sidebar pages on app.galya.io and the API module each one reflects.
+---
+
+The dashboard is [app.galya.io](https://app.galya.io). Sign in, pick a workspace in the sidebar switcher, then use the pages below. API calls you make against the [development API](/development-api) show up here for that workspace.
+
+## Get started
+
+[Get started](https://app.galya.io/get-started) is a six-step checklist: see the catalog, copy keys, index an item, create a user and link taste, query, and invite a teammate. The [quickstart](/quickstart) is that middle path as API calls.
+
+## Overview
+
+[Overview](https://app.galya.io) is labeled **Taste graph overview**. It shows taste regions, semantic themes, and audience affinity for the catalog you have indexed. This is the picture of the workspace after entities, contents, and links exist. You do not write this page through its own endpoint. You write the catalog, then look here.
+
+## Catalog
+
+[Catalog](https://app.galya.io/catalog) is your indexed items as taste regions and themes, one domain at a time. Indexing status sits at the top of the page. Create items with [Index](/guides/index) or a [connector](/guides/connectors).
+
+## People
+
+[People](https://app.galya.io/people) lists profiles in the taste graph and the cluster mix that comes from their links. Create them with [Entities](/guides/entities) using `type: user`, then [link](/guides/link) catalog items to them.
+
+## Audience types
+
+[Audience types](https://app.galya.io/audience-types) are groups of people. The map is taste regions. The audience dropdown recolors affinity. The same groups are readable from the API. See [Audience types](/guides/audience-types).
+
+## API keys and settings
+
+[API keys](https://app.galya.io/api-keys) holds the workspace publishable key and the workspace secret. [Settings](https://app.galya.io/settings) holds account keys, which you use when one server talks to more than one workspace. See [Authentication](/authentication).

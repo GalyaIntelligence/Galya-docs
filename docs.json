@@ -13,6 +13,19 @@
     "dark": "#0D9373"
   },
   "favicon": "/favicon.svg",
+  "api": {
+    "playground": {
+      "display": "interactive"
+    },
+    "url": "full",
+    "mdx": {
+      "server": "https://dev.api.galya.io",
+      "auth": {
+        "method": "key",
+        "name": "X-API-Key"
+      }
+    }
+  },
   "navigation": {
     "tabs": [
       {
@@ -20,7 +33,30 @@
         "groups": [
           {
             "group": "Get started",
-            "pages": ["introduction", "authentication", "environments"]
+            "pages": [
+              "introduction",
+              "dashboard",
+              "authentication",
+              "quickstart",
+              "development-api"
+            ]
+          },
+          {
+            "group": "Catalog",
+            "pages": [
+              "concepts/catalog-and-taste",
+              "guides/entities",
+              "guides/index",
+              "guides/link"
+            ]
+          },
+          {
+            "group": "Query",
+            "pages": ["guides/search", "guides/recommend", "guides/rerank", "guides/models"]
+          },
+          {
+            "group": "Agents and sources",
+            "pages": ["guides/agentic-search", "guides/connectors", "guides/audience-types"]
           }
         ]
       },
@@ -33,8 +69,8 @@
   "navbar": {
     "links": [
       {
-        "label": "Galya-docs",
-        "href": "https://github.com/GalyaIntelligence/Galya-docs"
+        "label": "Dashboard",
+        "href": "https://app.galya.io"
       }
     ]
   },

@@ -1,0 +1,33 @@
+---
+title: Catalog and taste
+description: Entities, contents, and links are the workspace. Query and the dashboard read them.
+---
+
+A workspace is the boundary for everything you create. Keys, catalog items, people, and links all belong to one workspace. Switch workspaces in the dashboard sidebar.
+
+## Three records
+
+**Entity.** The thing you recommend, score, or traverse. A product, a person, a brand. Create one with [POST /v1/entity](/guides/entities). People show on [People](https://app.galya.io/people). Products show on [Catalog](https://app.galya.io/catalog) once they have content.
+
+**Content.** One piece of text or media attached to an entity. A product can have a description and several images. Index content with [POST /v1/index](/guides/index). The entity is what queries return. The content is what gets embedded.
+
+**Link.** A directed fact that a parent entity is about a child, with a relation and a weight. The usual case is a person linked to a product they engaged with. Create one with [POST /v1/entity/\{parentId\}/link](/guides/link).
+
+```
+person  --about-->  product  --has-->  description, images
+```
+
+## What the dashboard is showing
+
+| You want | Look at |
+| --- | --- |
+| Did the item land? | [Catalog](https://app.galya.io/catalog) |
+| Does the person have a taste mix? | [People](https://app.galya.io/people) |
+| How does the workspace look as regions? | [Overview](https://app.galya.io) |
+| Which groups of people exist? | [Audience types](https://app.galya.io/audience-types) |
+
+Overview and audience types are views over the catalog and links. You do not upload those views. You index, link, and then open the page.
+
+## Query
+
+Search, recommend, and rerank read the same records. Pass the person’s id as `user_id`. The result is a ranked slice of your catalog, not a separate dataset. See [Search](/guides/search).

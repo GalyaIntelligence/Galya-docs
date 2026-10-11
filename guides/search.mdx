@@ -1,0 +1,45 @@
+---
+title: Search
+description: Rank the catalog relative to a person, or by a text query.
+api: "POST /v1/search"
+---
+
+Two shapes:
+
+- `user_id` ranks the catalog relative to that person’s links. This is **Query taste** on [Get started](https://app.galya.io/get-started).
+- `query` runs a text search over the catalog.
+
+Results are entities in your workspace. Open [Catalog](https://app.galya.io/catalog) to see the same items on the map.
+
+This playground posts to `https://dev.api.galya.io/v1/search`.
+
+<ParamField body="user_id" type="string">
+  Person to rank relative to. Required when `query` is omitted.
+</ParamField>
+
+<ParamField body="query" type="string">
+  Text query. When set, this call searches the catalog by that text instead of by `user_id`.
+</ParamField>
+
+<ParamField body="domain" type="string">
+  Limit the search to one catalog domain.
+</ParamField>
+
+<ParamField body="limit" type="number" default="20">
+  How many results to return.
+</ParamField>
+
+<ParamField body="model_id" type="string" default="cosine-rank-v1">
+  Model used when ranking relative to `user_id`. See [Models](/guides/models).
+</ParamField>
+
+<RequestExample>
+
+```bash
+curl https://dev.api.galya.io/v1/search \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"user_demo","limit":10}'
+```
+
+</RequestExample>

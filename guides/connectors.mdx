@@ -1,0 +1,31 @@
+---
+title: Connectors
+description: Connect a source and sync items into the catalog.
+api: "GET /v1/connectors"
+---
+
+A connector pulls items from a source you connect and indexes them into the workspace. Synced items show on [Catalog](https://app.galya.io/catalog), same as items you [index](/guides/index) yourself.
+
+This playground lists the workspace’s connections. It calls `https://dev.api.galya.io/v1/connectors`. Authorize with the workspace secret from [API keys](https://app.galya.io/api-keys).
+
+<RequestExample>
+
+```bash
+curl https://dev.api.galya.io/v1/connectors \
+  -H "X-API-Key: $GALYA_API_KEY"
+```
+
+</RequestExample>
+
+## Set one up
+
+1. `GET /v1/connectors/registry` lists sources you can connect.
+2. `POST /v1/connectors` creates a connection for this workspace.
+3. `POST /v1/connectors/{connectorId}/test` checks the connection.
+4. `POST /v1/connectors/{connectorId}/sync` indexes items. Watch [Catalog](https://app.galya.io/catalog). The indexing strip at the top is that sync.
+
+`GET /v1/connectors/requests` lists sources the workspace has asked for that are not available yet.
+
+<Note>
+  Sync runs as a job. `GET /v1/jobs` returns status if the catalog page is still catching up.
+</Note>

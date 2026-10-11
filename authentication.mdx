@@ -1,22 +1,44 @@
 ---
 title: Authentication
-description: Workspace API keys and admin credentials.
+description: Workspace, account, and agent keys, and where to copy them in the dashboard.
 ---
 
-## Workspace routes
-
-Send a workspace secret (`galya_sk_...`) on every `/v1/*` request (except unauthenticated meta routes):
+Send a key on every API call except public metadata:
 
 - Header: `X-API-Key: galya_sk_...`
 - Or: `Authorization: Bearer galya_sk_...`
 
-Optional header `X-Galya-Workspace-Id` must match the workspace that owns the key; otherwise the API returns `403 workspace_mismatch`.
+The playground on these docs asks for that header. Paste a workspace secret. Requests go to `https://dev.api.galya.io`.
 
-## Admin routes
+## Keys
 
-Admin routes under `/v1/admin/*` require:
+| Key | Prefix | Use it for | Where to copy it |
+| --- | --- | --- | --- |
+| Workspace secret | `galya_sk_` | Server calls for one workspace | [API keys](https://app.galya.io/api-keys), or Get started → **Copy your workspace keys** |
+| Workspace publishable | `galya_pk_` | Browser use. It identifies the workspace and is not a server secret. | [API keys](https://app.galya.io/api-keys) |
+| Account | `galya_ak_` | Server calls across workspaces. Also send `X-Galya-Workspace-Id`. | [Settings](https://app.galya.io/settings) |
+| Agent | `galya_ag_` | [Agentic search](/guides/agentic-search) only | Created with the agentic search keys API |
 
-- Header: `X-Galya-Admin-Key: <ADMIN_API_KEY>`
-- Or the same value as a Bearer token
+<Warning>
+  The secret is shown in full once, on the dashboard, in the browser session that created it. If you only see a prefix, create a new secret on [API keys](https://app.galya.io/api-keys). Do not put a secret in a browser app.
+</Warning>
 
-The admin key is configured as the Worker secret `ADMIN_API_KEY`, not per-workspace.
+## Workspace id header
+
+A workspace secret is already bound to one workspace. Omit `X-Galya-Workspace-Id`.
+
+An account key is not. Send the workspace’s public id:
+
+```bash
+curl https://dev.api.galya.io/v1/entities \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "X-Galya-Workspace-Id: wsp_..."
+```
+
+If the header does not match the key’s workspace, the API returns `403` with `workspace_mismatch`.
+
+## Dashboard
+
+Open [API keys](https://app.galya.io/api-keys) from the sidebar. The page title is **API keys**. Publishable keys are marked for the browser. Secret keys are the ones you paste into the playground and use on a server.
+
+[Get started](https://app.galya.io/get-started) shows the same pair in the side rail, under **Copy your workspace keys**, while you are setting up. Account keys are on [Settings](https://app.galya.io/settings).

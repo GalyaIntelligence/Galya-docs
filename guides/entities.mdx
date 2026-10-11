@@ -1,0 +1,63 @@
+---
+title: Create an entity
+description: Create a person, product, or other entity without writing vectors.
+api: "POST /v1/entity"
+---
+
+Creates the identity only: id, type, name, and metadata. Nothing is embedded until you [index content](/guides/index).
+
+A `type` of `user` shows on [People](https://app.galya.io/people). Other types show on [Catalog](https://app.galya.io/catalog) after they have content.
+
+This playground posts to `https://dev.api.galya.io/v1/entity`. Authorize with the workspace secret from [API keys](https://app.galya.io/api-keys).
+
+<ParamField body="entity_id" type="string">
+  Public id you choose, such as `user_demo`. Alias `id`. Omit to let the API generate one.
+</ParamField>
+
+<ParamField body="type" type="string" default="content">
+  Entity type. Use `user` for a person and `product` for a catalog item.
+</ParamField>
+
+<ParamField body="name" type="string">
+  Display name. People and catalog rows use this label.
+</ParamField>
+
+<ParamField body="domain" type="string">
+  Catalog slice, such as `fashion`. Omit when you are not scoping the entity yet.
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Extra fields you want stored on the entity. Returned on read.
+</ParamField>
+
+<RequestExample>
+
+```bash
+curl https://dev.api.galya.io/v1/entity \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"entity_id":"user_demo","type":"user","name":"Demo user"}'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json
+{
+  "entity": {
+    "id": "user_demo",
+    "type": "user",
+    "domain": null,
+    "name": "Demo user",
+    "metadata": {}
+  },
+  "content": null,
+  "vector_indexed": false,
+  "indexes": []
+}
+```
+
+</ResponseExample>
+
+If the body also includes content fields (`content`, `image_url`, `source_url`), this call indexes a content with the same id. Prefer [Index](/guides/index) when you mean to write content.

@@ -1,0 +1,91 @@
+---
+title: Quickstart
+description: Create a person, index one catalog item, link them, and query. Matches the Get started checklist.
+---
+
+This follows the checklist at [Get started](https://app.galya.io/get-started). You need the workspace secret from **Copy your workspace keys**.
+
+```bash
+export GALYA_API_KEY="galya_sk_..."
+```
+
+Examples call `https://dev.api.galya.io`. The same calls are filled in on the playground pages linked below.
+
+## 1. Index a catalog item
+
+Get started calls this **Index your catalog**. One item is enough. When it arrives, the checklist marks the step done, and the item shows on [Catalog](https://app.galya.io/catalog).
+
+```bash
+curl https://dev.api.galya.io/v1/index \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entity_id": "sku_crew",
+    "type": "product",
+    "name": "Weightless merino crew",
+    "content": "Lightweight merino crewneck for everyday wear.",
+    "kind": "text"
+  }'
+```
+
+<Card title="Index playground" icon="play" href="/guides/index">
+  Send this body from the docs. It posts to the development API.
+</Card>
+
+## 2. Create a person
+
+Get started calls this **Create a user and build their taste**. People you create show on [People](https://app.galya.io/people).
+
+```bash
+curl https://dev.api.galya.io/v1/entity \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entity_id": "user_demo",
+    "type": "user",
+    "name": "Demo user"
+  }'
+```
+
+<Card title="Entity playground" icon="user" href="/guides/entities">
+  Create the person without indexing content.
+</Card>
+
+## 3. Link them
+
+The link says the person is about that catalog item. That is the taste history queries use.
+
+```bash
+curl https://dev.api.galya.io/v1/entity/user_demo/link \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entity_id": "sku_crew",
+    "relation": "about",
+    "weight": 1
+  }'
+```
+
+<Card title="Link playground" icon="link" href="/guides/link">
+  Attach the catalog item to the person.
+</Card>
+
+## 4. Query taste
+
+Get started calls this **Query taste**. Search the catalog for that person, or recommend items of a type.
+
+```bash
+curl https://dev.api.galya.io/v1/search \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user_demo",
+    "limit": 10
+  }'
+```
+
+<Card title="Search playground" icon="search" href="/guides/search">
+  Rank the catalog relative to the person you just linked.
+</Card>
+
+Then open [Overview](https://app.galya.io) to see taste regions for the workspace, and [Catalog](https://app.galya.io/catalog) for the item you indexed.

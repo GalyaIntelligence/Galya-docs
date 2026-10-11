@@ -1,0 +1,81 @@
+---
+title: Index content
+description: Write one piece of text or media and attach it to an entity.
+api: "POST /v1/index"
+---
+
+Writes one content and its vectors. Pass `entity_id` of an entity that already exists, or omit `content_id` and send `entity_id` alone to create the entity and a same-id content together. That shortcut is what [Get started](https://app.galya.io/get-started) means by **Index your catalog**.
+
+Indexed items show on [Catalog](https://app.galya.io/catalog). The indexing strip at the top of that page is the same work.
+
+This playground posts to `https://dev.api.galya.io/v1/index`.
+
+<ParamField body="entity_id" type="string">
+  Entity this content represents. With no `content_id`, the API also upserts that entity.
+</ParamField>
+
+<ParamField body="content_id" type="string">
+  Public id of this content. When set, `entity_id` must already exist.
+</ParamField>
+
+<ParamField body="content" type="string">
+  Text to index. `text` is an alias.
+</ParamField>
+
+<ParamField body="kind" type="string">
+  `text`, `image`, `audio`, or `video`. Defaults from the fields you send.
+</ParamField>
+
+<ParamField body="image_url" type="string">
+  Image to index. Use this for a product photo.
+</ParamField>
+
+<ParamField body="name" type="string">
+  Label, used when this call also creates the entity.
+</ParamField>
+
+<ParamField body="type" type="string">
+  Entity type, used when this call also creates the entity. Example: `product`.
+</ParamField>
+
+<ParamField body="domain" type="string">
+  Catalog slice. A model that is scoped to a different domain returns `409 domain_mismatch`.
+</ParamField>
+
+<ParamField body="model_id" type="string">
+  Optional model. Omit to index with the models that apply to the domain.
+</ParamField>
+
+<RequestExample>
+
+```bash
+curl https://dev.api.galya.io/v1/index \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entity_id": "sku_crew",
+    "type": "product",
+    "name": "Weightless merino crew",
+    "content": "Lightweight merino crewneck for everyday wear.",
+    "kind": "text"
+  }'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json
+{
+  "entity": {
+    "id": "sku_crew",
+    "type": "product",
+    "name": "Weightless merino crew"
+  },
+  "content": { "id": "sku_crew" },
+  "vector_indexed": true,
+  "indexes": []
+}
+```
+
+</ResponseExample>

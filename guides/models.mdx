@@ -1,0 +1,38 @@
+---
+title: Models
+description: Models that score search, recommend, and rerank.
+api: "GET /v1/models"
+---
+
+A model is how a query scores entities. Platform models are available in every workspace. A workspace can also have its own. Search, recommend, and rerank take `model_id`. When you omit it, those calls use `cosine-rank-v1`.
+
+List models in this playground. It calls `https://dev.api.galya.io/v1/models`.
+
+The dashboard does not have a separate models page. You see the effect on [Overview](https://app.galya.io) and [Catalog](https://app.galya.io/catalog).
+
+<ParamField query="domain" type="string">
+  Only models for this domain.
+</ParamField>
+
+<ParamField query="kind" type="string">
+  Model kind, such as an encoder or a ranker.
+</ParamField>
+
+<ResponseField name="id" type="string">
+  Pass this value as `model_id` on a query.
+</ResponseField>
+
+<ResponseField name="scope" type="string">
+  `platform` or `workspace`.
+</ResponseField>
+
+<RequestExample>
+
+```bash
+curl https://dev.api.galya.io/v1/models \
+  -H "X-API-Key: $GALYA_API_KEY"
+```
+
+</RequestExample>
+
+To change the default model for a domain and operation, send `PATCH /v1/models/defaults` with the model id. Reads after that use the default when the request omits `model_id` only where the API applies workspace defaults. Search, recommend, and rerank still default to `cosine-rank-v1` when the body omits `model_id`.

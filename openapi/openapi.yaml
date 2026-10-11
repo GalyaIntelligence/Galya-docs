@@ -3,15 +3,13 @@ info:
   title: Galya API
   version: 0.1.0
   description: |
-    Cloudflare Workers API for indexing entities, linking taste history, and composing user state vectors.
+    Index a catalog, link taste, and query it.
 
     Workspace routes require a workspace API key (`galya_sk_...`) via `X-API-Key` or `Authorization: Bearer`.
     Admin routes require `X-Galya-Admin-Key` or Bearer with the admin secret.
 servers:
   - url: https://dev.api.galya.io
-    description: Development
-  - url: https://galya-api.galya-intelligence.workers.dev
-    description: Production (workers.dev until custom domain cutover)
+    description: Development API
 tags:
   - name: meta
     description: Service metadata and health
@@ -374,7 +372,7 @@ paths:
       summary: Link a child entity to a parent and refresh user state
       description: |
         Creates the parent user entity if missing. Requires the child entity to exist.
-        Refreshes the parent's composed state vector in Turbopuffer when linking succeeds.
+        Updates the parent's composed taste when the link succeeds.
       security:
         - WorkspaceApiKey: []
         - WorkspaceBearer: []
@@ -493,14 +491,14 @@ components:
             error: unauthorized
             message: Admin credentials are invalid
     AdminNotConfigured:
-      description: ADMIN_API_KEY not configured on the Worker
+      description: Admin key is not configured
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorBody"
           example:
             error: admin_not_configured
-            message: ADMIN_API_KEY is not configured
+            message: Admin key is not configured
     MissingOrInvalidApiKey:
       description: Missing or invalid workspace API key
       content:

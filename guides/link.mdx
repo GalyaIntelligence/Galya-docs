@@ -1,0 +1,52 @@
+---
+title: Link taste
+description: Attach a catalog entity to a person or other parent.
+api: "POST /v1/entity/{parentId}/link"
+---
+
+Records that the parent is about the child. Get started calls this **Create a user and build their taste**. After a few links, [People](https://app.galya.io/people) can show a taste composition for that person.
+
+This playground posts to `https://dev.api.galya.io/v1/entity/{parentId}/link`.
+
+<ParamField path="parentId" type="string" required>
+  Public id of the parent. For taste, this is the person (`user_demo`).
+</ParamField>
+
+<ParamField body="entity_id" type="string" required>
+  Public id of the child entity to attach, usually a product. `child_id` and `content_id` are aliases.
+</ParamField>
+
+<ParamField body="relation" type="string" default="about">
+  Why they are linked. Defaults to `about`.
+</ParamField>
+
+<ParamField body="weight" type="number" default="1">
+  How strongly this link counts when taste is composed.
+</ParamField>
+
+<RequestExample>
+
+```bash
+curl https://dev.api.galya.io/v1/entity/user_demo/link \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"entity_id":"sku_crew","relation":"about","weight":1}'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json
+{
+  "parent_id": "user_demo",
+  "child_id": "sku_crew",
+  "relation": "about",
+  "weight": 1,
+  "state": { "status": "ready", "history_count": 1 }
+}
+```
+
+</ResponseExample>
+
+The child must already exist. Index the catalog item first, or the API returns `404`.

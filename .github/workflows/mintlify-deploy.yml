@@ -51,7 +51,8 @@ jobs:
           fi
           rm -rf "$pull_root"
           test -f openapi/openapi.yaml || test -f openapi/openapi.json
-          chmod +x scripts/validate-mintlify-speakeasy-openapi.sh
+          chmod +x scripts/validate-mintlify-speakeasy-openapi.sh scripts/pin-docs-playground.sh
+          ./scripts/pin-docs-playground.sh
           ./scripts/validate-mintlify-speakeasy-openapi.sh
 
       - name: Commit Speakeasy-generated OpenAPI
@@ -71,14 +72,17 @@ jobs:
         id: mint
         env:
           DOCS_TAG: ${{ inputs.docs_tag }}
-          MINTLIFY_PROJECT_ID_DEV: ${{ vars.MINTLIFY_PROJECT_ID_DEV || secrets.MINTLIFY_PROJECT_ID_DEV }}
-          MINTLIFY_PROJECT_ID_PROD: ${{ vars.MINTLIFY_PROJECT_ID_PROD || secrets.MINTLIFY_PROJECT_ID_PROD }}
+          VAR_DEV: ${{ vars.MINTLIFY_PROJECT_ID_DEV }}
+          VAR_PROD: ${{ vars.MINTLIFY_PROJECT_ID_PROD }}
+          SECRET_DEV: ${{ secrets.MINTLIFY_PROJECT_ID_DEV }}
+          SECRET_PROD: ${{ secrets.MINTLIFY_PROJECT_ID_PROD }}
         run: |
           if [ "$DOCS_TAG" = "dev" ]; then
-            echo "project_id=${MINTLIFY_PROJECT_ID_DEV}" >> "$GITHUB_OUTPUT"
+            pid="${VAR_DEV:-$SECRET_DEV}"
           else
-            echo "project_id=${MINTLIFY_PROJECT_ID_PROD}" >> "$GITHUB_OUTPUT"
+            pid="${VAR_PROD:-$SECRET_PROD}"
           fi
+          echo "project_id=${pid}" >> "$GITHUB_OUTPUT"
 
       - name: Trigger Mintlify deployment
         if: steps.mint.outputs.project_id != ''

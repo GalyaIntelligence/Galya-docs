@@ -1,0 +1,56 @@
+---
+title: Agentic search
+description: Let an outside agent query the workspace under a policy you set.
+api: "POST /v1/agentic-search/search"
+---
+
+Agentic search is the endpoint an agent is allowed to call. You turn it on for the workspace, choose which operations and domains are allowed, and issue an agent key (`galya_ag_`).
+
+A workspace secret also works. The agent key cannot call the rest of the API.
+
+Create the policy with `PUT /v1/agentic-search/config` and keys with `POST /v1/agentic-search/keys`. Both take the workspace secret, not the agent key. Read `GET /v1/agentic-search/manifest` to see what agents are allowed to do.
+
+This playground posts to `https://dev.api.galya.io/v1/agentic-search/search`.
+
+<ParamField body="op" type="string" required>
+  `search`, `recommend`, `rerank`, `get_entity`, or `traverse`.
+</ParamField>
+
+<ParamField body="user_id" type="string">
+  Person, required for `search`, `recommend`, and `rerank`.
+</ParamField>
+
+<ParamField body="domain" type="string">
+  Catalog slice. Must be one the policy allows.
+</ParamField>
+
+<ParamField body="type" type="string">
+  Entity type for `recommend`.
+</ParamField>
+
+<ParamField body="candidate_ids" type="string[]">
+  Required for `rerank`.
+</ParamField>
+
+<ParamField body="entity_id" type="string">
+  Required for `get_entity`.
+</ParamField>
+
+<ParamField body="limit" type="integer">
+  Capped by the policy’s max results.
+</ParamField>
+
+<RequestExample>
+
+```bash
+curl https://dev.api.galya.io/v1/agentic-search/search \
+  -H "X-API-Key: $GALYA_AGENT_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"op":"search","user_id":"user_demo","limit":10}'
+```
+
+</RequestExample>
+
+<Note>
+  If agentic search is off for the workspace, the call returns `403 agentic_search_disabled`. Enable it in the config before trying the playground.
+</Note>

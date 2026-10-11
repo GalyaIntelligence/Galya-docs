@@ -1,0 +1,22 @@
+---
+title: Audience types
+description: Groups of people with similar taste, on the dashboard and from the API.
+api: "GET /v1/clusters"
+---
+
+[Audience types](https://app.galya.io/audience-types) is the dashboard view. Circles on the map are taste regions. The audience dropdown recolors affinity for one group of people. The domain selector matches the domains on [Catalog](https://app.galya.io/catalog).
+
+The API calls these clusters. This playground lists them from `https://dev.api.galya.io/v1/clusters`.
+
+People get into these groups from the links you write, not from a label you upload. Open a person on [People](https://app.galya.io/people) to see their mix.
+
+<RequestExample>
+
+```bash
+curl https://dev.api.galya.io/v1/clusters \
+  -H "X-API-Key: $GALYA_API_KEY"
+```
+
+</RequestExample>
+
+`GET /v1/clusters/{clusterId}` returns one group and its members. Member ids are entity ids you can [search](/guides/search) or [recommend](/guides/recommend) against.

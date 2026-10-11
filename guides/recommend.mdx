@@ -1,0 +1,40 @@
+---
+title: Recommend
+description: Find catalog entities similar to a person’s taste.
+api: "POST /v1/recommend"
+---
+
+Returns entities of a given type that sit near the person’s taste. Use it when you want a feed, not a rerank of a list you already have.
+
+This playground posts to `https://dev.api.galya.io/v1/recommend`.
+
+<ParamField body="user_id" type="string" required>
+  Person to recommend for. They need [links](/guides/link) or the result has nothing to stand on.
+</ParamField>
+
+<ParamField body="type" type="string" default="content">
+  Entity type to return, such as `product`.
+</ParamField>
+
+<ParamField body="domain" type="string">
+  Catalog slice to stay inside.
+</ParamField>
+
+<ParamField body="limit" type="number" default="20">
+  How many entities to return.
+</ParamField>
+
+<ParamField body="model_id" type="string" default="cosine-rank-v1">
+  Scoring model. See [Models](/guides/models).
+</ParamField>
+
+<RequestExample>
+
+```bash
+curl https://dev.api.galya.io/v1/recommend \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"user_demo","type":"product","limit":10}'
+```
+
+</RequestExample>
