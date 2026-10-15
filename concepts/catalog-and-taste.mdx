@@ -11,7 +11,7 @@ A workspace is the boundary for everything you create. Keys, catalog items, peop
 
 **Content.** One piece of text or media attached to an entity. A product can have a description and several images. Index content with [POST /v1/index](/guides/index). The entity is what queries return. The content is what gets embedded.
 
-**Link.** A directed fact that a parent entity is about a child, with a relation and a weight. The usual case is a person linked to a product they engaged with. Create one with [POST /v1/entity/\{parentId\}/link](/guides/link).
+**Link.** A directed fact that a parent entity is about a child, with a relation and a weight. The usual case is a person linked to a product they engaged with. Create one with [POST /v1/entity/\{parentId\}/link](/guides/link). Remove one with [DELETE /v1/entity/\{parentId\}/link/\{childId\}](/guides/unlink), which recomposes the parent's taste from the links that remain.
 
 ```
 person  --about-->  product  --has-->  description, images
