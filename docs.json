@@ -47,7 +47,8 @@
               "concepts/catalog-and-taste",
               "guides/entities",
               "guides/index",
-              "guides/link"
+              "guides/link",
+              "guides/unlink"
             ]
           },
           {

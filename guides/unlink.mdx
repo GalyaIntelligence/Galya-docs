@@ -1,0 +1,53 @@
+---
+title: Unlink taste
+description: Remove a catalog entity from a person or other parent.
+api: "DELETE /v1/entity/{parentId}/link/{childId}"
+---
+
+Undoes a [link](/guides/link). The parent's taste is recomposed from the links that remain, so the removed item stops counting right away. Neither entity is deleted.
+
+This playground sends to `https://dev.api.galya.io/v1/entity/{parentId}/link/{childId}`.
+
+<ParamField path="parentId" type="string" required>
+  Public id of the parent, usually the person (`user_demo`).
+</ParamField>
+
+<ParamField path="childId" type="string" required>
+  Public id of the linked child entity, usually a product.
+</ParamField>
+
+<ParamField query="relation" type="string">
+  Only remove this relation (for example `saved`). Omit it to remove every relation between the two entities.
+</ParamField>
+
+<ParamField query="model_id" type="string">
+  Decoder used to recompose the parent's taste. Defaults to the same model as linking.
+</ParamField>
+
+<RequestExample>
+
+```bash
+curl -X DELETE https://dev.api.galya.io/v1/entity/user_demo/link/sku_crew \
+  -H "X-API-Key: $GALYA_API_KEY"
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json
+{
+  "parent_id": "user_demo",
+  "child_id": "sku_crew",
+  "relations": ["about"],
+  "removed": 1,
+  "model_id": "weighted-mean-v1",
+  "state": { "status": "ready", "history_count": 2 }
+}
+```
+
+</ResponseExample>
+
+`state.status` is `ready` when taste was recomposed from the remaining links. When you remove the last link it is `cleared`: the person has no taste until you link something again.
+
+The API returns `404` when the parent or child doesn't exist, or when they aren't linked (with that `relation`, if you passed one).
