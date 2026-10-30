@@ -5,8 +5,10 @@ info:
   description: |
     Index a catalog, link taste, and query it.
 
-    Workspace routes require a workspace API key (`galya_sk_...`) via `X-API-Key` or `Authorization: Bearer`.
-    Admin routes require `X-Galya-Admin-Key` or Bearer with the admin secret.
+    Workspace data routes accept a workspace secret (`galya_sk_...`) or an account key
+    (`galya_ak_...`) plus `X-Galya-Workspace-Id`, via `X-API-Key` or `Authorization: Bearer`.
+    Account provisioning routes require `galya_ak_...` only.
+    Admin routes require `X-Galya-Admin-Key` or Bearer with the global admin secret.
 servers:
   - url: https://dev.api.galya.io
     description: Development API
@@ -17,6 +19,16 @@ tags:
     description: Workspace provisioning (admin only)
   - name: core
     description: Entity index, read, and link operations
+  - name: connectors
+    description: Native connector registry and workspace connections
+  - name: sessions
+    description: End-user sessions that attribute platform traffic
+  - name: traffic
+    description: Request volume split by end users vs agents
+  - name: agentic-search
+    description: Expose the graph to outside agents under a workspace policy
+  - name: agents
+    description: Hosted Hermes sandboxes, skills, and MCP config
 paths:
   /:
     get:
@@ -216,8 +228,27 @@ paths:
     post:
       tags: [core]
       operationId: indexEntity
-      summary: Upsert an entity and optional embedding
-      description: Same behavior as `POST /v1/entity`.
+      summary: Index one content (text, image, …) and write its vectors
+      description: |
+        Contents and entities are separate records. A content is one indexed artifact
+        and carries the vectors; an entity is the thing you recommend, score and traverse.
+        Many contents link to one entity (a product with three photos and a description);
+        the entity's vector is composed from its contents at read time.
+
+        Body shapes:
+        - `content_id` (+ optional `entity_id`): write this content. `entity_id` names the
+          entity it represents and must already exist (`404 entity_not_found` otherwise).
+          Without `entity_id` the content stays unattached: searchable, never a candidate.
+        - `entity_id` alone (no `content_id`): the one-record shortcut. Upserts the entity
+          (`type`, `name`, `metadata`) and writes a same-id content linked to it. This is the
+          pre-split body shape, so existing callers keep working.
+        - neither: an unattached content with a generated `cnt_…` id.
+
+        `model_id` may be an encoder, or a predictor/decoder whose policy names an encoder.
+        When `model_id` is omitted, the content is written into every active encoder the
+        registry would use for its domain. Omitted fields on an existing content are kept.
+        Use `POST /v1/entity` to create entities on purpose, and
+        `POST /v1/entity/{entityId}/contents` to attach contents indexed earlier.
       security:
         - WorkspaceApiKey: []
         - WorkspaceBearer: []
@@ -260,7 +291,27 @@ paths:
               const result = await galya.core.indexEntity({
                 workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
               }, {
-                body: {},
+                body: {
+                  metadata: {
+                    readout: {
+                      "color": {
+                        "Black": 0.8,
+                        "Grey": 0.2,
+                      },
+                      "product_family": "Dress",
+                      "pattern": [
+                        {
+                          o: "Solid",
+                          p: 0.9,
+                        },
+                        {
+                          o: "Stripe",
+                          p: 0.1,
+                        },
+                      ],
+                    },
+                  },
+                },
               });
 
               console.log(result);
@@ -271,8 +322,16 @@ paths:
     post:
       tags: [core]
       operationId: upsertEntity
-      summary: Upsert an entity and optional embedding
-      description: Alias of `POST /v1/index`.
+      summary: Upsert an entity (identity only, no vectors)
+      description: |
+        Writes `entity_id`, `type`, `domain`, `name`, `metadata`. Nothing is embedded.
+        Index contents with `POST /v1/index` (`content_id` + `entity_id`) and they compose
+        the entity's vector at read time. `model_id` may be passed to imply `domain` from a
+        domain-scoped model.
+
+        Compatibility: when the body also carries content fields (`content`, `embedding`,
+        `source_url`, `image_url`, …) this behaves like the `/v1/index` shortcut and writes
+        a same-id content too, exactly as before the split.
       security:
         - WorkspaceApiKey: []
         - WorkspaceBearer: []
@@ -315,7 +374,70 @@ paths:
               const result = await galya.core.upsertEntity({
                 workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
               }, {
-                body: {},
+                body: {
+                  metadata: {
+                    readout: {
+                      "color": {
+                        "Black": 0.8,
+                        "Grey": 0.2,
+                      },
+                      "product_family": "Dress",
+                      "pattern": [
+                        {
+                          o: "Solid",
+                          p: 0.9,
+                        },
+                        {
+                          o: "Stripe",
+                          p: 0.1,
+                        },
+                      ],
+                    },
+                  },
+                },
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/entities/types:
+    get:
+      tags: [core]
+      operationId: listEntityTypes
+      summary: List entity types used in this workspace
+      description: |
+        Distinct types recorded when entities are created or their type changes
+        (`product`, `user`, and any later type). Backfilled from existing entities.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+      responses:
+        "200":
+          description: Entity types for the authenticated workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityTypesResponse"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+        "500":
+          $ref: "#/components/responses/InternalError"
+      x-codeSamples:
+        - lang: typescript
+          label: listEntityTypes
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.listEntityTypes({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
               });
 
               console.log(result);
@@ -365,6 +487,271 @@ paths:
             }
 
             run();
+  /v1/entity/{entityId}/contents:
+    get:
+      tags: [core]
+      operationId: listEntityContents
+      summary: Contents linked to an entity
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - $ref: "#/components/parameters/EntityIdPath"
+      responses:
+        "200":
+          description: Contents that represent this entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityContentsResponse"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      x-codeSamples:
+        - lang: typescript
+          label: listEntityContents
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.listEntityContents({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                entityId: "<id>",
+              });
+
+              console.log(result);
+            }
+
+            run();
+    post:
+      tags: [core]
+      operationId: attachContents
+      summary: Attach existing contents to an entity
+      description: |
+        Links contents indexed earlier (or attached to another entity) to this entity and
+        retags their stored vectors in place, so the entity's composed vector picks them up
+        without re-encoding. Optional `role` and `weight` apply to every content in the call.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - $ref: "#/components/parameters/EntityIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttachContentsRequest"
+      responses:
+        "200":
+          description: Contents attached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachContentsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+        "404":
+          description: Entity, or every named content, not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      x-codeSamples:
+        - lang: typescript
+          label: attachContents
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.attachContents({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                entityId: "<id>",
+                body: {},
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/entity/{entityId}/contents/{contentId}:
+    delete:
+      tags: [core]
+      operationId: detachContent
+      summary: Detach a content from an entity
+      description: The content stays indexed but unattached; its vectors are retagged with no owner.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - $ref: "#/components/parameters/EntityIdPath"
+        - $ref: "#/components/parameters/ContentIdPath"
+      responses:
+        "200":
+          description: Content detached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetachContentResponse"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      x-codeSamples:
+        - lang: typescript
+          label: detachContent
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.detachContent({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                entityId: "<id>",
+                contentId: "<id>",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/contents:
+    get:
+      tags: [core]
+      operationId: listContents
+      summary: List indexed contents
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - name: entity_id
+          in: query
+          schema:
+            type: string
+          description: Only contents linked to this entity
+        - name: unattached
+          in: query
+          schema:
+            type: boolean
+          description: Only contents with no entity
+        - name: kind
+          in: query
+          schema:
+            type: string
+        - name: domain
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Case-insensitive match on id, name, or text
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Page of contents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+      x-codeSamples:
+        - lang: typescript
+          label: listContents
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.listContents({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {});
+
+              console.log(result);
+            }
+
+            run();
+  /v1/content/{contentId}:
+    get:
+      tags: [core]
+      operationId: getContent
+      summary: Get a content by public id
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - $ref: "#/components/parameters/ContentIdPath"
+      responses:
+        "200":
+          description: Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentSingleResponse"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      x-codeSamples:
+        - lang: typescript
+          label: getContent
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.getContent({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                contentId: "<id>",
+              });
+
+              console.log(result);
+            }
+
+            run();
   /v1/entity/{parentId}/link:
     post:
       tags: [core]
@@ -372,7 +759,9 @@ paths:
       summary: Link a child entity to a parent and refresh user state
       description: |
         Creates the parent user entity if missing. Requires the child entity to exist.
-        Updates the parent's composed taste when the link succeeds.
+        Does not re-encode the child. Recomposes the parent's state vector from its
+        linked children using the latent model (`model_id`, a decoder). When `model_id`
+        is omitted, the workspace compose default is used, falling back to weighted-mean-v1.
       security:
         - WorkspaceApiKey: []
         - WorkspaceBearer: []
@@ -422,10 +811,2933 @@ paths:
                 workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
               }, {
                 parentId: "<id>",
+                body: {
+                  metadata: {
+                    dwell_ms: 8200,
+                    duration_s: 21,
+                    at: 1793340000000,
+                  },
+                },
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/entity/{parentId}/link/{childId}:
+    delete:
+      tags: [core]
+      operationId: unlinkEntity
+      summary: Remove a child link from a parent and refresh user state
+      description: |
+        Deletes the parent→child link. With `relation`, only that relation is removed;
+        otherwise every relation between the two entities is removed. The parent's state
+        vector is then recomposed from its remaining links using the latent model
+        (`model_id`, a decoder; defaults as for `linkEntity`). When no links remain, the
+        parent's state vectors are deleted from every vector index and `state.status` is
+        `cleared`. Neither entity is deleted.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - name: parentId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Parent entity public id (often a user id)
+        - name: childId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Linked child entity public id
+        - name: relation
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Only remove this relation. Omit to remove all relations.
+        - name: model_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Decoder used to recompose the parent state
+        - name: encoder_model_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Encoder index to write the recomposed state into
+      responses:
+        "200":
+          description: Link removed and state recomposed (or cleared)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnlinkEntityResponse"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+        "404":
+          description: Parent, child, latent model, or link not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      x-codeSamples:
+        - lang: typescript
+          label: unlinkEntity
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.unlinkEntity({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                parentId: "<id>",
+                childId: "<id>",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/visualize:
+    get:
+      tags: [core]
+      operationId: visualize
+      summary: Entities with relative positions from the vector index
+      description: |
+        One call that returns everything needed to draw the workspace: its entities,
+        each entity's relative position computed server-side from the vector stored in
+        the vector index (classical MDS on cosine distance between the folded content
+        vectors, scaled to the unit sphere, so on-screen distance tracks index distance),
+        nearest-neighbour similarity edges by cosine, and the stored links between the
+        returned entities. Entities with nothing indexed yet have `position: null` and
+        `embedded: false`. Intended for the dashboard explorer; raw vectors are never
+        sent to the client.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - name: model_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Encoder public id. Defaults to the platform encoder.
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Only entities of this type
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Only entities in this domain
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 200
+          description: Most recently updated entities to include
+        - name: neighbors
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 10
+            default: 3
+          description: Nearest neighbours per embedded entity to emit as `edges`; 0 disables
+        - name: min_similarity
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: -1
+            maximum: 1
+            default: 0.15
+          description: Drop neighbour edges below this cosine similarity
+        - name: include_links
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+          description: Include stored links between the returned entities
+      responses:
+        "200":
+          description: Visualization scene
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [model_id, dimensions, layout, nodes, edges, links, stats]
+                properties:
+                  model_id:
+                    type: string
+                  dimensions:
+                    type: integer
+                  layout:
+                    type: object
+                    required: [method, dims, scale]
+                    properties:
+                      method:
+                        type: string
+                        enum: [mds_cosine]
+                      dims:
+                        type: integer
+                      scale:
+                        type: string
+                        enum: [unit_sphere]
+                  nodes:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, type, domain, name, embedded, position]
+                      properties:
+                        id:
+                          type: string
+                        type:
+                          type: string
+                        domain:
+                          type: [string, "null"]
+                        name:
+                          type: [string, "null"]
+                        embedded:
+                          type: boolean
+                          description: Whether the vector index holds a vector for this entity
+                        position:
+                          type: [array, "null"]
+                          description: "[x, y, z] in the unit sphere; null when not embedded"
+                          items:
+                            type: number
+                          minItems: 3
+                          maxItems: 3
+                  edges:
+                    type: array
+                    description: Nearest-neighbour edges by cosine similarity, high to low
+                    items:
+                      type: object
+                      required: [source, target, similarity]
+                      properties:
+                        source:
+                          type: string
+                        target:
+                          type: string
+                        similarity:
+                          type: number
+                  links:
+                    type: array
+                    description: Stored links whose parent and child are both in `nodes`
+                    items:
+                      type: object
+                      required: [source, target, relation, weight]
+                      properties:
+                        source:
+                          type: string
+                        target:
+                          type: string
+                        relation:
+                          type: string
+                        weight:
+                          type: number
+                  stats:
+                    type: object
+                    required: [entity_count, embedded_count, edge_count, link_count, truncated]
+                    properties:
+                      entity_count:
+                        type: integer
+                      embedded_count:
+                        type: integer
+                      edge_count:
+                        type: integer
+                      link_count:
+                        type: integer
+                      truncated:
+                        type: boolean
+                        description: More entities exist than `limit`
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+        "404":
+          description: Encoder model not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      x-codeSamples:
+        - lang: typescript
+          label: visualize
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.visualize({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {});
+
+              console.log(result);
+            }
+
+            run();
+  /v1/concepts:
+    get:
+      tags: [core]
+      operationId: getConcepts
+      summary: Concept map for a domain
+      description: |
+        Returns concepts (topics, themes, or aesthetics) as 2D concept-space
+        regions. Centroids come from UMAP/PCA of stored concept embeddings for
+        the requested encoder; Voronoi polygons tile the unit square. Concept
+        vectors are persisted in Postgres and mirrored to a dedicated Turbopuffer
+        namespace per domain and encoder for filtered nearest-neighbor search.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+            default: fashion
+        - name: model_id
+          in: query
+          required: false
+          schema:
+            type: string
+            default: grwm-jepa-1
+          description: Encoder or ranker whose concept space layout is shown.
+        - name: level
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [topics, themes, aesthetics]
+            default: aesthetics
+      responses:
+        "200":
+          description: Concept map
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [domain, model_id, level, extent, items]
+                properties:
+                  domain:
+                    type: string
+                  model_id:
+                    type: string
+                  level:
+                    type: string
+                  extent:
+                    type: array
+                    items:
+                      type: number
+                    minItems: 2
+                    maxItems: 2
+                  layout_source:
+                    type: string
+                    enum: [embedding]
+                  turbopuffer_namespace:
+                    type: string
+                    description: Per-domain concept centroid index for ANN queries.
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, blurb, level, centroid, polygon]
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        blurb:
+                          type: string
+                        level:
+                          type: string
+                        parent_id:
+                          type: string
+                          nullable: true
+                        child_ids:
+                          type: array
+                          items:
+                            type: string
+                        volume:
+                          type: number
+                        centroid:
+                          type: object
+                          properties:
+                            x:
+                              type: number
+                            y:
+                              type: number
+                        polygon:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              x:
+                                type: number
+                              y:
+                                type: number
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+        "404":
+          description: Domain catalog not available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      x-codeSamples:
+        - lang: typescript
+          label: getConcepts
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.getConcepts({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {});
+
+              console.log(result);
+            }
+
+            run();
+  /v1/landscape:
+    get:
+      tags: [core]
+      operationId: getLandscape
+      summary: Precomputed taste landscape for the workspace catalog
+      description: |
+        Returns the latest `landscape` job result: every indexed catalog vector
+        projected to 2D (UMAP, cosine), the taste region each point sits on, a
+        terrain heightfield with one hill per region (height grows with member
+        count), and each point's nearest neighbours. Regions come from the
+        workspace's `taste_region` clusters; with no anchors they are derived
+        from the vectors. Everything is computed server-side —
+        raw embeddings are never returned. `status` is `missing` until a
+        landscape has been computed; use `POST /v1/landscape/refresh`.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - name: model_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Encoder public id. Defaults to the newest landscape for any encoder.
+      responses:
+        "200":
+          description: Landscape state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LandscapeResponse"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+      x-codeSamples:
+        - lang: typescript
+          label: getLandscape
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.getLandscape({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/landscape/refresh:
+    post:
+      tags: [core]
+      operationId: refreshLandscape
+      summary: Recompute the taste landscape
+      description: |
+        Enqueues a `landscape` job that reads the catalog vectors from the vector
+        index and projects them. With `sync=true` the response carries the
+        finished landscape; otherwise poll `GET /v1/landscape`.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - name: sync
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model_id:
+                  type: string
+                  description: Encoder public id. Defaults to the platform encoder.
+                type:
+                  type: string
+                  description: Only entities of this type
+                domain:
+                  type: string
+                  description: Only entities in this content domain
+                sync:
+                  type: boolean
+      responses:
+        "200":
+          description: Landscape computed (sync)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LandscapeResponse"
+        "202":
+          description: Landscape job queued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, job_id, poll]
+                properties:
+                  status:
+                    type: string
+                    enum: [pending]
+                  job_id:
+                    type: string
+                  poll:
+                    type: string
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+        "403":
+          $ref: "#/components/responses/WorkspaceMismatch"
+        "500":
+          description: Landscape job failed (`sync=true` only)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, job_id, error]
+                properties:
+                  status:
+                    type: string
+                    enum: [failed]
+                  job_id:
+                    type: string
+                  error:
+                    type: string
+      x-codeSamples:
+        - lang: typescript
+          label: refreshLandscape
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.refreshLandscape({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {});
+
+              console.log(result);
+            }
+
+            run();
+  /v1/connectors/registry:
+    get:
+      tags: [connectors]
+      operationId: listConnectorRegistry
+      summary: List native connector definitions
+      security: []
+      responses:
+        "200":
+          description: Connector registry catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ConnectorDefinition"
+      x-codeSamples:
+        - lang: typescript
+          label: listConnectorRegistry
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.connectors.listConnectorRegistry();
+
+              console.log(result);
+            }
+
+            run();
+  /v1/connectors/registry/{publicId}:
+    get:
+      tags: [connectors]
+      operationId: getConnectorRegistryEntry
+      summary: Get one connector definition
+      security: []
+      parameters:
+        - name: publicId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Connector definition
+        "404":
+          description: Not found
+      x-codeSamples:
+        - lang: typescript
+          label: getConnectorRegistryEntry
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.connectors.getConnectorRegistryEntry({
+                publicId: "<id>",
+              });
+
+
+            }
+
+            run();
+  /v1/connectors/oauth/callback:
+    get:
+      tags: [connectors]
+      operationId: connectorOAuthCallback
+      summary: OAuth redirect callback (orchestrator)
+      security: []
+      responses:
+        "302":
+          description: Redirect to dashboard
+      x-codeSamples:
+        - lang: typescript
+          label: connectorOAuthCallback
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.connectors.connectorOAuthCallback();
+
+
+            }
+
+            run();
+  /v1/connectors:
+    get:
+      tags: [connectors]
+      operationId: listConnectors
+      summary: List workspace connector instances
+      security:
+        - WorkspaceApiKey: []
+      responses:
+        "200":
+          description: Connected connectors
+      x-codeSamples:
+        - lang: typescript
+          label: listConnectors
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya({
+              workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+            });
+
+            async function run() {
+              await galya.connectors.listConnectors();
+
+
+            }
+
+            run();
+    post:
+      tags: [connectors]
+      operationId: createConnector
+      summary: Connect a native integration
+      security:
+        - WorkspaceApiKey: []
+      responses:
+        "201":
+          description: Connector instance created
+      x-codeSamples:
+        - lang: typescript
+          label: createConnector
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya({
+              workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+            });
+
+            async function run() {
+              await galya.connectors.createConnector();
+
+
+            }
+
+            run();
+  /v1/connectors/{connectorId}:
+    get:
+      tags: [connectors]
+      operationId: getConnector
+      summary: Get workspace connector instance
+      security:
+        - WorkspaceApiKey: []
+      parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Connector instance
+      x-codeSamples:
+        - lang: typescript
+          label: getConnector
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya({
+              workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+            });
+
+            async function run() {
+              await galya.connectors.getConnector({
+                connectorId: "45bcd83e-f01d-4895-992a-463538114f8d",
+              });
+
+
+            }
+
+            run();
+    patch:
+      tags: [connectors]
+      operationId: updateConnector
+      summary: Update connector instance
+      security:
+        - WorkspaceApiKey: []
+      parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Updated
+      x-codeSamples:
+        - lang: typescript
+          label: updateConnector
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya({
+              workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+            });
+
+            async function run() {
+              await galya.connectors.updateConnector({
+                connectorId: "5cd2fc9f-09d5-4f4c-84cf-d6596cb3048a",
+              });
+
+
+            }
+
+            run();
+    delete:
+      tags: [connectors]
+      operationId: deleteConnector
+      summary: Remove connector instance
+      security:
+        - WorkspaceApiKey: []
+      parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Deleted
+      x-codeSamples:
+        - lang: typescript
+          label: deleteConnector
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya({
+              workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+            });
+
+            async function run() {
+              await galya.connectors.deleteConnector({
+                connectorId: "02cc6343-a380-4737-8b94-f5d3c8842ff2",
+              });
+
+
+            }
+
+            run();
+  /v1/connectors/{connectorId}/test:
+    post:
+      tags: [connectors]
+      operationId: testConnector
+      summary: Test connector worker connection
+      security:
+        - WorkspaceApiKey: []
+      parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Test result
+      x-codeSamples:
+        - lang: typescript
+          label: testConnector
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya({
+              workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+            });
+
+            async function run() {
+              await galya.connectors.testConnector({
+                connectorId: "ac5d92b2-41b1-4611-857c-6d6186192746",
+              });
+
+
+            }
+
+            run();
+  /v1/connectors/{connectorId}/sync:
+    post:
+      tags: [connectors]
+      operationId: syncConnector
+      summary: Run connector sync job
+      security:
+        - WorkspaceApiKey: []
+      parameters:
+        - name: connectorId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "202":
+          description: Sync job enqueued
+      x-codeSamples:
+        - lang: typescript
+          label: syncConnector
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya({
+              workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+            });
+
+            async function run() {
+              await galya.connectors.syncConnector({
+                connectorId: "e7eab81a-a0a5-447f-af70-24de0e9d879a",
+              });
+
+
+            }
+
+            run();
+  /v1/connectors/requests:
+    post:
+      tags: [connectors]
+      operationId: submitConnectorRequest
+      summary: Request a new native connector
+      security:
+        - WorkspaceApiKey: []
+      responses:
+        "201":
+          description: Request submitted
+      x-codeSamples:
+        - lang: typescript
+          label: submitConnectorRequest
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya({
+              workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+            });
+
+            async function run() {
+              await galya.connectors.submitConnectorRequest();
+
+
+            }
+
+            run();
+  /v1/sessions:
+    post:
+      tags: [sessions]
+      operationId: startSession
+      summary: Start an end-user session
+      description: |
+        Opens a session for one end user. Send the returned `session_id` as `X-Galya-Session-Id`
+        on later calls so they count as platform traffic. The call itself is not counted.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartSessionRequest"
+      responses:
+        "201":
+          description: Session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: That session id is already active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      x-codeSamples:
+        - lang: typescript
+          label: startSession
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.sessions.startSession({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                user_id: "<id>",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/sessions/{sessionId}:
+    get:
+      tags: [sessions]
+      operationId: getSession
+      summary: Read a session
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/SessionIdPath"
+      responses:
+        "200":
+          description: Session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      x-codeSamples:
+        - lang: typescript
+          label: getSession
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.sessions.getSession({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                sessionId: "<id>",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/sessions/{sessionId}/end:
+    post:
+      tags: [sessions]
+      operationId: endSession
+      summary: End a session
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/SessionIdPath"
+      responses:
+        "200":
+          description: Session ended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Session already ended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      x-codeSamples:
+        - lang: typescript
+          label: endSession
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.sessions.endSession({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                sessionId: "<id>",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/traffic:
+    get:
+      tags: [traffic]
+      operationId: getTraffic
+      summary: Traffic split by end users vs agents
+      description: |
+        Platform requests are calls made inside an active end-user session. Agent requests are
+        calls to `POST /v1/agentic-search/search`. Includes per-operation, per-route, per-user
+        and per-agent breakdowns for the range.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - name: from
+          in: query
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          schema: {type: string, format: date-time}
+        - name: bucket
+          in: query
+          schema: {type: string, enum: [hour, day], default: day}
+        - name: source
+          in: query
+          description: Narrow request-level figures to one actor. `people` is omitted for `agent`, `agents` for `platform`.
+          schema: {type: string, enum: [all, platform, agent], default: all}
+      responses:
+        "200":
+          description: Totals, deltas, time series, heatmap, operation and actor breakdowns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+      x-codeSamples:
+        - lang: typescript
+          label: getTraffic
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.traffic.getTraffic({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {});
+
+              console.log(result);
+            }
+
+            run();
+  /v1/agentic-search/config:
+    get:
+      tags: [agentic-search]
+      operationId: getAgenticSearchConfig
+      summary: Read the agentic search policy
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      responses:
+        "200":
+          description: Current policy (defaults when none saved)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [config]
+                properties:
+                  config:
+                    $ref: "#/components/schemas/AgenticSearchConfig"
+      x-codeSamples:
+        - lang: typescript
+          label: getAgenticSearchConfig
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.agenticSearch.getAgenticSearchConfig({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              });
+
+              console.log(result);
+            }
+
+            run();
+    put:
+      tags: [agentic-search]
+      operationId: updateAgenticSearchConfig
+      summary: Update the agentic search policy
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgenticSearchConfigPatch"
+      responses:
+        "200":
+          description: Saved policy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [config]
+                properties:
+                  config:
+                    $ref: "#/components/schemas/AgenticSearchConfig"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+      x-codeSamples:
+        - lang: typescript
+          label: updateAgenticSearchConfig
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.agenticSearch.updateAgenticSearchConfig({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {});
+
+              console.log(result);
+            }
+
+            run();
+  /v1/agentic-search/keys:
+    get:
+      tags: [agentic-search]
+      operationId: listAgentKeys
+      summary: List agent keys
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      responses:
+        "200":
+          description: Active agent keys
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentKey"
+      x-codeSamples:
+        - lang: typescript
+          label: listAgentKeys
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.agenticSearch.listAgentKeys({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              });
+
+              console.log(result);
+            }
+
+            run();
+    post:
+      tags: [agentic-search]
+      operationId: createAgentKey
+      summary: Create an agent key
+      description: Returns the `galya_ag_...` secret exactly once.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Key created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [key, secret]
+                properties:
+                  key:
+                    $ref: "#/components/schemas/AgentKey"
+                  secret:
+                    type: string
+                    description: Shown once; starts with `galya_ag_`
+      x-codeSamples:
+        - lang: typescript
+          label: createAgentKey
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.agenticSearch.createAgentKey({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/agentic-search/keys/{keyId}:
+    delete:
+      tags: [agentic-search]
+      operationId: revokeAgentKey
+      summary: Revoke an agent key
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^agk_[a-f0-9]+$
+      responses:
+        "200":
+          description: Key revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [key]
+                properties:
+                  key:
+                    $ref: "#/components/schemas/AgentKey"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      x-codeSamples:
+        - lang: typescript
+          label: revokeAgentKey
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.agenticSearch.revokeAgentKey({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                keyId: "<id>",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/agentic-search/manifest:
+    get:
+      tags: [agentic-search]
+      operationId: getAgenticSearchManifest
+      summary: What agents can do here
+      description: |
+        Capabilities, limits, price, and an MCP-style tool schema. Accepts any Galya key
+        (including `galya_ag_`), or no key with `?workspace=wsp_...` once search is enabled.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+        - AgentKey: []
+        - {}
+      parameters:
+        - name: workspace
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Workspace public id for unauthenticated reads
+      responses:
+        "200":
+          description: Manifest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgenticSearchManifest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+      x-codeSamples:
+        - lang: typescript
+          label: getAgenticSearchManifest
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.agenticSearch.getAgenticSearchManifest();
+
+              console.log(result);
+            }
+
+            run();
+  /v1/agentic-search/search:
+    post:
+      tags: [agentic-search]
+      operationId: agenticSearch
+      summary: Search the graph as an agent
+      description: |
+        The only endpoint agent keys may call and the only source of agent traffic.
+        Runs the request under the workspace policy: ops outside `allowed_ops` return
+        `403 op_not_exposed`, domains/types outside the allow-lists return
+        `403 domain_not_exposed` / `type_not_exposed`, and `limit` / `depth` are clamped.
+
+        Access: any Galya key (`galya_ag_`, `galya_sk_`, `galya_ak_`). When the workspace has
+        `paid_access_enabled`, unkeyed calls carrying `X-Galya-Workspace-Id` get `402` with an MPP
+        `WWW-Authenticate: Payment` challenge and an x402 `PAYMENT-REQUIRED` header; retry with
+        `Authorization: Payment <credential>` or `PAYMENT-SIGNATURE`. Optional `X-Galya-Agent-Id`
+        is stored for attribution only.
+      security:
+        - AgentKey: []
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+        - {}
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - name: X-Galya-Agent-Id
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Caller-supplied agent identity (e.g. an ERC-8004 id); never verified
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgenticSearchRequest"
+      responses:
+        "200":
+          description: Search results, scores, graph, or entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgenticSearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Missing/invalid key or search disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "402":
+          description: Payment required (paid access on, no valid credential)
+          headers:
+            WWW-Authenticate:
+              schema: {type: string}
+              description: MPP challenge (`Payment realm=... amount=... currency=... payee=...`)
+            PAYMENT-REQUIRED:
+              schema: {type: string}
+              description: Base64 x402 payment requirements
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentRequiredBody"
+        "403":
+          description: Policy rejected the request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "503":
+          description: Paid access on but price, payee, or facilitator missing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      x-codeSamples:
+        - lang: typescript
+          label: agenticSearch
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.agenticSearch.agenticSearch({
+                body: {
+                  op: "rerank",
+                },
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/agents/{agentId}/config:
+    get:
+      tags: [agents]
+      operationId: getAgentConfig
+      summary: Read the agent config the dashboard edits
+      description: Skills and MCP servers for one hosted agent. MCP credentials are redacted.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Current config
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [config_revision, skills, mcp]
+                properties:
+                  config_revision: {type: integer}
+                  system_prompt: {type: string}
+                  model: {type: string, nullable: true}
+                  model_provider: {type: string, enum: [bedrock]}
+                  model_region: {type: string}
+                  skills:
+                    type: array
+                    items: {type: object}
+                  mcp:
+                    type: object
+        "404":
+          $ref: "#/components/responses/NotFound"
+      x-codeSamples:
+        - lang: typescript
+          label: getAgentConfig
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.agents.getAgentConfig({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                agentId: "<id>",
+              });
+
+              console.log(result);
+            }
+
+            run();
+    put:
+      tags: [agents]
+      operationId: putAgentConfig
+      summary: Save prompt, model, and skills
+      description: Replaces skills when the array is present and asks a running sandbox to fetch the new config.
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                system_prompt: {type: string}
+                model: {type: string}
+                skills:
+                  type: array
+                  items: {type: object}
+      responses:
+        "200":
+          description: Agent after the save
+        "400":
+          $ref: "#/components/responses/BadRequest"
+      x-codeSamples:
+        - lang: typescript
+          label: putAgentConfig
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.agents.putAgentConfig({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                agentId: "<id>",
+                body: {},
+              });
+
+
+            }
+
+            run();
+  /v1/agents/{agentId}/skills:
+    put:
+      tags: [agents]
+      operationId: putAgentSkills
+      summary: Replace the skills enabled for an agent
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Saved skills
+      x-codeSamples:
+        - lang: typescript
+          label: putAgentSkills
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.agents.putAgentSkills({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                agentId: "<id>",
+              });
+
+
+            }
+
+            run();
+  /v1/agents/{agentId}/mcp:
+    get:
+      tags: [agents]
+      operationId: listAgentMcp
+      summary: List MCP servers attached to an agent
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Connections and a redacted mcp.json preview
+      x-codeSamples:
+        - lang: typescript
+          label: listAgentMcp
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.agents.listAgentMcp({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                agentId: "<id>",
+              });
+
+
+            }
+
+            run();
+    post:
+      tags: [agents]
+      operationId: createAgentMcp
+      summary: Attach an MCP server
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "201":
+          description: Connection saved. The token is not returned.
+      x-codeSamples:
+        - lang: typescript
+          label: createAgentMcp
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.agents.createAgentMcp({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                agentId: "<id>",
+              });
+
+
+            }
+
+            run();
+  /v1/agents/{agentId}/messages:
+    get:
+      tags: [agents]
+      operationId: listAgentMessages
+      summary: List control-plane conversation turns
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Ordered user and Hermes task messages
+      x-codeSamples:
+        - lang: typescript
+          label: listAgentMessages
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.agents.listAgentMessages({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                agentId: "<id>",
+              });
+
+
+            }
+
+            run();
+    post:
+      tags: [agents]
+      operationId: queueAgentMessage
+      summary: Queue a message for this agent's Hermes task
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "202":
+          description: Message queued for the task
+        "409":
+          description: Agent is not running
+      x-codeSamples:
+        - lang: typescript
+          label: queueAgentMessage
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.agents.queueAgentMessage({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                agentId: "<id>",
+              });
+
+
+            }
+
+            run();
+  /v1/agents/{agentId}/start:
+    post:
+      tags: [agents]
+      operationId: startAgent
+      summary: Start or restart the agent's Fargate task
+      security:
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Agent is being provisioned
+      x-codeSamples:
+        - lang: typescript
+          label: startAgent
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.agents.startAgent({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                agentId: "<id>",
+              });
+
+
+            }
+
+            run();
+  /v1/internal/agent-runtime:
+    get:
+      tags: [agents]
+      operationId: getAgentRuntime
+      summary: Read-only harness config for the sandbox
+      description: |
+        The sandbox Lambda and the Hermes task call this with the agent runtime token.
+        The response includes skill content and MCP credentials. Workspace API keys are not accepted.
+      security: []
+      responses:
+        "200":
+          description: Hermes image, skills, and mcp_servers
+        "401":
+          description: Missing or unknown runtime token
+      x-codeSamples:
+        - lang: typescript
+          label: getAgentRuntime
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.agents.getAgentRuntime();
+
+
+            }
+
+            run();
+  /v1/internal/agent-runtime/commands:
+    get:
+      tags: [agents]
+      operationId: pullAgentCommands
+      summary: Pull queued messages for the authenticated Hermes task
+      security: []
+      responses:
+        "200":
+          description: Pending commands for this task only
+        "401":
+          description: Missing, expired, or unknown runtime token
+      x-codeSamples:
+        - lang: typescript
+          label: pullAgentCommands
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.agents.pullAgentCommands();
+
+
+            }
+
+            run();
+  /v1/internal/agent-runtime/commands/{messageId}/result:
+    post:
+      tags: [agents]
+      operationId: completeAgentCommand
+      summary: Report a Hermes message result
+      security: []
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Result persisted idempotently
+        "401":
+          description: Missing, expired, or unknown runtime token
+      x-codeSamples:
+        - lang: typescript
+          label: completeAgentCommand
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.agents.completeAgentCommand({
+                messageId: "0610dd48-1273-4694-81d6-e1c56e4359a6",
+              });
+
+
+            }
+
+            run();
+  /v1/query:
+    post:
+      tags: [core]
+      operationId: runGalyaQuery
+      summary: Execute a typed Galya expression or GalyaQL string, or a batch of them
+      description: |
+        Send one query as `expr` or `galyaql`, or up to 25 as `queries`. Batch
+        queries run in parallel and come back in order; a failing query holds
+        `{ error, message, status }` in its slot and the batch still returns 200.
+
+        There is no default model here. Ranking statements name one with `BY
+        <model>`, the request's `model`, or `expr.model_id`; without one the query
+        is a 400 `invalid_expr`. (The `/v1/rerank`, `/v1/recommend` and
+        `/v1/search` shortcuts fall back to the workspace's `default_model_id`.)
+
+        A shopper with no taste state yet is not an error: `rerank` keeps the
+        candidates in the order given, `recommend` and `nearest` return no
+        results, and all three set `explain.user_state: missing`.
+
+        GalyaQL statements (one per query; a trailing `;` is allowed; optional
+        clauses may come in any order; quote an id that holds spaces, commas, or
+        a keyword). Parse errors give the character position.
+        - `SCORE <entity> BY <model> RELATIVE_TO <user:id | entity:id>`
+        - `SCORE AFFINITY <entity> BY <model>`
+        - `FIND SIMILAR_TO <user> TYPE <type> LIMIT <n> [BY <model>]`
+        - `NEAREST TO taste(<user>) LIMIT <n> [BY <model>]`
+        - `RERANK <id>[,<id>...] FOR <user> [BY <model>]`
+        - `FIND RELATED TO <entity> [RELATION <relation>] [DEPTH <n>]`
+        - `LIST TYPE <type>[,<type>...] [DOMAIN <domain>] [LIMIT <n>]` — catalog
+          page in `entities` with `next_cursor` (pass it back as `expr.cursor`)
+        - `LINKS FROM <id>[,<id>...] [RELATION <relation>] [LIMIT <n>]` — the
+          newest `n` links per parent in `links`, oldest first per parent
+
+        `LIST`, `FIND SIMILAR_TO`, `NEAREST` and `RERANK` may end with
+        `INCLUDE metadata[,contents]` (`expr.include`) to return each entity's
+        metadata and contents with the result.
+
+        Every expression is validated before it runs: `limit` 1–1000, `depth`
+        1–5, at most 1000 distinct `candidate_ids`. Rerank candidates that are
+        unknown or have no vector yet are listed in `explain.dropped`. When more
+        than a few candidates lack vectors, they are queued for indexing
+        (`meta.job_ids`) instead of encoded inside the request.
+      security: &workspaceSecurity
+        - WorkspaceApiKey: []
+        - WorkspaceBearer: []
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GalyaQueryRequest"
+      responses:
+        "200":
+          description: Query result, or `{ results, meta }` for a batch
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/GalyaQueryResult"
+                  - $ref: "#/components/schemas/GalyaQueryBatchResult"
+        "400":
+          description: |
+            `invalid_expr` (the message names the field), `unknown_field` (a
+            field this endpoint does not read, named with the allowed ones),
+            `galyaql_parse_error` (the message gives the position), or `bad_request`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+      x-codeSamples:
+        - lang: typescript
+          label: runGalyaQuery
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.runGalyaQuery({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                body: {
+                  expr: {
+                    op: "links",
+                  },
+                },
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/query/validate:
+    post:
+      tags: [core]
+      operationId: validateGalyaQuery
+      summary: Validate a typed Galya expression or GalyaQL string without executing it
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GalyaQueryRequest"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+      x-codeSamples:
+        - lang: typescript
+          label: validateGalyaQuery
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.validateGalyaQuery({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                body: {
+                  queries: [
+                    {
+                      galyaql: "<value>",
+                    },
+                  ],
+                },
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/search:
+    post:
+      tags: [core]
+      operationId: searchWorkspace
+      summary: Search indexed content semantically or retrieve nearest items for a user
+      description: |
+        With `query` and no `model_id`, search is hybrid: BM25 over each entity's
+        name, text and short metadata strings, plus nearest neighbors in the text
+        and image-text encoder spaces, fused by weighted reciprocal rank
+        (`explain.retrieval: hybrid_rrf`). `explain.legs` reports candidates and
+        any error per leg; one failing leg degrades results instead of failing the
+        call. Keyword hits that match only some query terms are kept only when the
+        text encoder also places them near the query (`explain.legs.bm25.dropped`
+        counts the rest); hits with every term rank first. The keyword index is kept current on index calls and rebuilt with a
+        `text_index` job. With `model_id`, only that encoder is searched.
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchRequest"
+      responses:
+        "200":
+          description: Ranked search results with retrieval explanation
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "503":
+          description: Every retrieval leg failed (keyword index and both encoders)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      x-codeSamples:
+        - lang: typescript
+          label: searchWorkspace
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.searchWorkspace({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                body: {
+                  user_id: "<id>",
+                  limit: 20,
+                },
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/recommend:
+    post:
+      tags: [core]
+      operationId: recommendForUser
+      summary: Recommend indexed entities for a user
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecommendRequest"
+      responses:
+        "200":
+          description: Ranked recommendations
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+      x-codeSamples:
+        - lang: typescript
+          label: recommendForUser
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.recommendForUser({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                body: {
+                  user_id: "<id>",
+                },
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/rerank:
+    post:
+      tags: [core]
+      operationId: rerankForUser
+      summary: Rerank supplied candidate entity ids for a user
+      description: |
+        Vector models (`cosine-rank-v1`, ...) rank the candidates against the user's state vector.
+
+        **Readout-state models** (`hm-user-state-v1`: the H&M user-state model on the System 1
+        server, EC2 us-east-1) use no vectors:
+
+        1. *Signals* are the user's links (`POST /v1/entity/{user}/link` with `relation` = `like`,
+           `save`, `add_to_bag`, `dwell`, `skip`, `unlike`, `unsave`; see `LinkSignalMetadata`).
+           Weights: like +1, save +1.5, add_to_bag +2, dwell 0.5 · clip(relative dwell, 0, 2) where
+           relative dwell = (dwell / duration) / median over the user's dwells, fast skip (< 1.5 s)
+           or skip −0.5; recency decay 0.5^(interactions after it / 4).
+        2. *Readouts* are fetched by id as Turbopuffer attributes (no vector query) for the linked
+           and the candidate entities; they come from entity `metadata.readout` (see
+           `EntityReadout`), with PlanetScale metadata filling entities not re-indexed yet.
+        3. *User state*: the positive interactions go to the model server (`/v1/user-state`). The
+           result is cached per (user, positive-interaction list) and refreshed in the background
+           after link writes. On failure the pooled taste formula is used and
+           `meta.state_source` is `fallback`.
+        4. *Score* (the live-shop dashboard's formula): per field, the expected log-lift
+           log S − log P of the user state S over the candidates' marginal P (Dirichlet prior
+           α = 2, eps 1e-3; skips push mass away, β = 1.5), centred per field, minus 1.5 per
+           recently interacted item of the same product (`metadata.parent_asin` / `product_id`).
+           Candidates without a readout are dropped (`explain.dropped.no_readout`).
+
+        Readout-state models only rerank; other ops answer `model_op_unsupported`.
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RerankRequest"
+            examples:
+              vector:
+                value: {user_id: u1, candidate_ids: [dress_a, dress_b]}
+              readoutState:
+                summary: H&M user-state model (no vectors)
+                value: {user_id: shopper_1, candidate_ids: [vid_1, vid_2, vid_3], model_id: hm-user-state-v1, include: [metadata]}
+      responses:
+        "200":
+          description: Reranked candidates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RerankResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+      x-codeSamples:
+        - lang: typescript
+          label: rerankForUser
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.rerankForUser({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                body: {
+                  user_id: "u1",
+                  candidate_ids: [
+                    "dress_a",
+                    "dress_b",
+                  ],
+                },
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/links:
+    get:
+      tags: [core]
+      operationId: listEntityLinks
+      summary: List taste graph links
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: parent_id, in: query, schema: {type: string}}
+        - {name: child_id, in: query, schema: {type: string}}
+        - {name: relation, in: query, schema: {type: string}}
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        "200":
+          description: Page of links
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkPage"
+      x-codeSamples:
+        - lang: typescript
+          label: listEntityLinks
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.listEntityLinks({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/workspace/settings:
+    get:
+      tags: [core]
+      operationId: getWorkspaceSettings
+      summary: Read workspace settings
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+      responses:
+        "200":
+          description: Current settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSettings"
+        "401":
+          $ref: "#/components/responses/MissingOrInvalidApiKey"
+      x-codeSamples:
+        - lang: typescript
+          label: getWorkspaceSettings
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.getWorkspaceSettings({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              });
+
+              console.log(result);
+            }
+
+            run();
+    patch:
+      tags: [core]
+      operationId: updateWorkspaceSettings
+      summary: Set the workspace default model
+      description: |
+        `default_model_id` is the ranker the `/v1/rerank`, `/v1/recommend` and
+        `/v1/search` shortcuts use when a call names none. It must resolve to a
+        ranking model in this workspace; `null` clears it back to `cosine-rank-v1`.
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [default_model_id]
+              properties:
+                default_model_id: {type: [string, "null"]}
+      responses:
+        "200":
+          description: Saved settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: "`model_not_found`: no ranking model with that id in this workspace"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+      x-codeSamples:
+        - lang: typescript
+          label: updateWorkspaceSettings
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.updateWorkspaceSettings({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                body: {
+                  default_model_id: "<id>",
+                },
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/workspace/stats:
+    get:
+      tags: [core]
+      operationId: getWorkspaceStats
+      summary: Summarize indexed entities, content, links, types, and domains
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+      responses:
+        "200":
+          description: Workspace statistics
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+      x-codeSamples:
+        - lang: typescript
+          label: getWorkspaceStats
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.getWorkspaceStats({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/clusters:
+    get:
+      tags: [core]
+      operationId: listIntelligenceClusters
+      summary: List audience or taste-region clusters
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - name: concept
+          in: query
+          required: true
+          schema: {type: string, enum: [audiences, taste_regions]}
+        - {name: entity_type, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: Cluster summaries
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+      x-codeSamples:
+        - lang: typescript
+          label: listIntelligenceClusters
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.listIntelligenceClusters({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                concept: "taste_regions",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/clusters/{clusterId}:
+    get:
+      tags: [core]
+      operationId: getIntelligenceCluster
+      summary: Read a cluster and its highest-scoring members
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: clusterId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Cluster detail
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+        "404":
+          $ref: "#/components/responses/NotFound"
+      x-codeSamples:
+        - lang: typescript
+          label: getIntelligenceCluster
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.getIntelligenceCluster({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                clusterId: "2efe1e4b-aa8e-4a64-b0b3-230b70c83c71",
+              });
+
+              console.log(result);
+            }
+
+            run();
+  /v1/trends:
+    get:
+      tags: [core]
+      operationId: getIntelligenceTrends
+      summary: Read activity metrics or audience and taste-region trends
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: concept, in: query, schema: {type: string, enum: [audiences, taste_regions]}}
+        - {name: metric, in: query, schema: {type: string, enum: [queries, model_usage, links, entities]}}
+        - {name: entity_type, in: query, schema: {type: string}}
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+      responses:
+        "200":
+          description: Trend series
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+      x-codeSamples:
+        - lang: typescript
+          label: getIntelligenceTrends
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.getIntelligenceTrends({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              });
+
+              console.log(result);
+            }
+
+            run();
+    post:
+      tags: [core]
+      operationId: snapshotIntelligenceTrends
+      summary: Compute a trend snapshot
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: sync, in: query, schema: {type: boolean, default: false}}
+      responses:
+        "201": {description: Snapshot completed synchronously}
+        "202": {description: Snapshot job queued}
+      x-codeSamples:
+        - lang: typescript
+          label: snapshotIntelligenceTrends
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.core.snapshotIntelligenceTrends({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {});
+
+
+            }
+
+            run();
+  /v1/swarms:
+    get:
+      tags: [core]
+      operationId: listSwarms
+      summary: List reusable customer cohorts
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+      responses:
+        "200":
+          description: Swarm list
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+      x-codeSamples:
+        - lang: typescript
+          label: listSwarms
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.listSwarms({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              });
+
+              console.log(result);
+            }
+
+            run();
+    post:
+      tags: [core]
+      operationId: createSwarm
+      summary: Create a reusable customer cohort
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SwarmInput"
+      responses:
+        "201":
+          description: Swarm created
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+      x-codeSamples:
+        - lang: typescript
+          label: createSwarm
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              const result = await galya.core.createSwarm({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
                 body: {},
               });
 
               console.log(result);
+            }
+
+            run();
+  /v1/swarms/{swarmId}:
+    get:
+      tags: [core]
+      operationId: getSwarm
+      summary: Read a customer cohort
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: swarmId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Swarm detail}
+        "404": {$ref: "#/components/responses/NotFound"}
+      x-codeSamples:
+        - lang: typescript
+          label: getSwarm
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.core.getSwarm({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                swarmId: "<id>",
+              });
+
+
+            }
+
+            run();
+    patch:
+      tags: [core]
+      operationId: updateSwarm
+      summary: Update a customer cohort
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: swarmId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SwarmInput"
+      responses:
+        "200": {description: Swarm updated}
+        "404": {$ref: "#/components/responses/NotFound"}
+      x-codeSamples:
+        - lang: typescript
+          label: updateSwarm
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.core.updateSwarm({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                swarmId: "<id>",
+                body: {},
+              });
+
+
+            }
+
+            run();
+    delete:
+      tags: [core]
+      operationId: deleteSwarm
+      summary: Delete a customer cohort
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: swarmId, in: path, required: true, schema: {type: string}}
+      responses:
+        "204": {description: Swarm deleted}
+        "404": {$ref: "#/components/responses/NotFound"}
+      x-codeSamples:
+        - lang: typescript
+          label: deleteSwarm
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.core.deleteSwarm({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                swarmId: "<id>",
+              });
+
+
+            }
+
+            run();
+  /v1/simulations:
+    get:
+      tags: [core]
+      operationId: listSimulations
+      summary: List customer cohort simulations
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: swarm_id, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        "200": {description: Simulation list}
+      x-codeSamples:
+        - lang: typescript
+          label: listSimulations
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.core.listSimulations({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              });
+
+
+            }
+
+            run();
+  /v1/simulations/run:
+    post:
+      tags: [core]
+      operationId: runSimulation
+      summary: Run a customer cohort simulation
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: sync, in: query, schema: {type: boolean, default: false}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [swarm_id]
+              properties:
+                swarm_id: {type: string}
+                sync: {type: boolean}
+                config: {type: object, additionalProperties: true}
+      responses:
+        "201": {description: Simulation completed synchronously}
+        "202": {description: Simulation queued}
+        "404": {$ref: "#/components/responses/NotFound"}
+      x-codeSamples:
+        - lang: typescript
+          label: runSimulation
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.core.runSimulation({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                body: {
+                  swarm_id: "<id>",
+                },
+              });
+
+
+            }
+
+            run();
+  /v1/simulations/{simulationId}:
+    get:
+      tags: [core]
+      operationId: getSimulation
+      summary: Read a simulation and its report
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: simulationId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Simulation detail}
+        "404": {$ref: "#/components/responses/NotFound"}
+      x-codeSamples:
+        - lang: typescript
+          label: getSimulation
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.core.getSimulation({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                simulationId: "37eb52c9-0fab-4dae-8a54-3d0b24cd03e7",
+              });
+
+
+            }
+
+            run();
+  /v1/jobs:
+    get:
+      tags: [core]
+      operationId: listJobs
+      summary: List workspace jobs
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: status, in: query, schema: {type: string}}
+        - {name: kind, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        "200": {description: Job list}
+      x-codeSamples:
+        - lang: typescript
+          label: listJobs
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.core.listJobs({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              });
+
+
+            }
+
+            run();
+    post:
+      tags: [core]
+      operationId: createJob
+      summary: Queue or synchronously execute a workspace job
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: sync, in: query, schema: {type: boolean, default: false}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobInput"
+      responses:
+        "201": {description: Job completed synchronously}
+        "202": {description: Job queued}
+      x-codeSamples:
+        - lang: typescript
+          label: createJob
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.core.createJob({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                body: {
+                  kind: "calibrate",
+                },
+              });
+
+
+            }
+
+            run();
+  /v1/jobs/{jobId}:
+    get:
+      tags: [core]
+      operationId: getJob
+      summary: Read workspace job state and result
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: jobId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Job detail}
+        "404": {$ref: "#/components/responses/NotFound"}
+      x-codeSamples:
+        - lang: typescript
+          label: getJob
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.core.getJob({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                jobId: "3f250f6c-b987-45c1-b9f9-6bac1e2299c4",
+              });
+
+
+            }
+
+            run();
+    patch:
+      tags: [core]
+      operationId: updateJob
+      summary: Replace the payload of a pending job
+      description: |
+        Only `pending` jobs can be updated; the runner reads the payload when it
+        starts the job. Jobs that are running or finished return 409.
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: jobId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobUpdateInput"
+      responses:
+        "200": {description: Job updated}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/JobConflict"}
+      x-codeSamples:
+        - lang: typescript
+          label: updateJob
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.core.updateJob({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                jobId: "bdd5bfcb-b79c-4206-9c61-8b033d6d468f",
+                body: {
+                  payload: {
+                    "key": "<value>",
+                    "key1": "<value>",
+                  },
+                },
+              });
+
+
+            }
+
+            run();
+  /v1/jobs/{jobId}/cancel:
+    post:
+      tags: [core]
+      operationId: cancelJob
+      summary: Cancel a pending or running job
+      description: |
+        Sets the job to `cancelled`. A running job's work is not interrupted, but
+        its outcome is discarded and the job stays `cancelled`. Connector syncs stop
+        at the next page callback. Jobs that already finished return 409.
+      security: *workspaceSecurity
+      parameters:
+        - $ref: "#/components/parameters/OptionalWorkspaceHeader"
+        - {name: jobId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200": {description: Job cancelled}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/JobConflict"}
+      x-codeSamples:
+        - lang: typescript
+          label: cancelJob
+          source: |-
+            import { Galya } from "@galya-intelligence/galya-api";
+
+            const galya = new Galya();
+
+            async function run() {
+              await galya.core.cancelJob({
+                workspaceApiKey: process.env["GALYA_WORKSPACE_API_KEY"] ?? "",
+              }, {
+                jobId: "98449c4f-d645-4124-86e8-d3fc6fb8b978",
+              });
+
+
             }
 
             run();
@@ -447,7 +3759,18 @@ components:
       type: http
       scheme: bearer
       description: Workspace API key (`galya_sk_...`) as Bearer token
+    AgentKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Search-only agent key (`galya_ag_...`); valid on /v1/agentic-search/search and /manifest only
   parameters:
+    SessionIdPath:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
     WorkspaceIdPath:
       name: workspaceId
       in: path
@@ -455,6 +3778,12 @@ components:
       schema:
         type: string
         pattern: ^wsp_[a-zA-Z0-9_-]+$
+    ContentIdPath:
+      name: contentId
+      in: path
+      required: true
+      schema:
+        type: string
     EntityIdPath:
       name: entityId
       in: path
@@ -481,6 +3810,15 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorBody"
+    JobConflict:
+      description: The job's status does not allow this change
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            error: job_not_cancellable
+            message: Job is already completed
     UnauthorizedAdmin:
       description: Admin credentials invalid
       content:
@@ -529,6 +3867,326 @@ components:
           type: string
         message:
           type: string
+    GalyaQuery:
+      type: object
+      additionalProperties: false
+      properties:
+        expr:
+          type: object
+          required: [op]
+          properties:
+            op:
+              type: string
+              enum: [score, score_affinity, recommend, nearest, rerank, traverse, list, links]
+          additionalProperties: true
+        galyaql:
+          type: string
+        model:
+          type: string
+          description: Model for GalyaQL statements without a `BY` clause. There is no default.
+      anyOf:
+        - required: [expr]
+        - required: [galyaql]
+    GalyaQueryRequest:
+      oneOf:
+        - $ref: "#/components/schemas/GalyaQuery"
+        - type: object
+          additionalProperties: false
+          required: [queries]
+          properties:
+            queries:
+              type: array
+              minItems: 1
+              maxItems: 25
+              items:
+                $ref: "#/components/schemas/GalyaQuery"
+    WorkspaceSettings:
+      type: object
+      required: [default_model_id, effective_default_model_id]
+      properties:
+        default_model_id: {type: [string, "null"]}
+        effective_default_model_id:
+          type: string
+          description: What the shortcuts use now; `cosine-rank-v1` when none is set.
+    GalyaQueryResult:
+      type: object
+      required: [compiled, explain, meta]
+      properties:
+        compiled: {type: object, additionalProperties: true}
+        results:
+          type: array
+          items:
+            type: object
+            required: [entity_id, score, name, type]
+            properties:
+              entity_id: {type: string}
+              score: {type: number}
+              name: {type: [string, "null"]}
+              type: {type: string}
+              domain: {type: [string, "null"], description: "With `include: [metadata]`."}
+              metadata: {type: object, additionalProperties: true, description: "With `include: [metadata]`."}
+              contents:
+                type: array
+                description: "With `include: [contents]`."
+                items: {type: object, additionalProperties: true}
+        scores:
+          type: array
+          items: {type: object, additionalProperties: true}
+        graph: {type: object, additionalProperties: true}
+        entities:
+          type: array
+          description: "`list` only."
+          items: {type: object, additionalProperties: true}
+        next_cursor:
+          type: [string, "null"]
+          description: "`list` only."
+        links:
+          type: array
+          description: "`links` only."
+          items:
+            $ref: "#/components/schemas/LinkItem"
+        explain:
+          type: object
+          additionalProperties: true
+          properties:
+            user_state:
+              type: string
+              enum: [missing]
+              description: Set when the user has no taste state yet.
+            dropped:
+              type: object
+              properties:
+                not_found: {type: array, items: {type: string}}
+                no_vector: {type: array, items: {type: string}}
+        meta:
+          type: object
+          required: [latency_ms]
+          properties:
+            latency_ms: {type: number}
+            job_ids: {type: array, items: {type: string}}
+            vector_index_note: {type: string}
+    GalyaQueryBatchResult:
+      type: object
+      required: [results, meta]
+      properties:
+        results:
+          type: array
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/GalyaQueryResult"
+              - type: object
+                required: [error, message, status]
+                properties:
+                  error: {type: string}
+                  message: {type: string}
+                  status: {type: integer}
+        meta:
+          type: object
+          properties:
+            latency_ms: {type: number}
+    SearchRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        query: {type: string}
+        user_id: {type: string}
+        domain: {type: string}
+        model_id: {type: string}
+        limit: {type: integer, minimum: 1, maximum: 100, default: 20}
+        include:
+          type: array
+          items: {type: string, enum: [metadata, contents]}
+          description: Adds each result's name, type, metadata and/or contents (pictures live on contents).
+      anyOf:
+        - required: [query]
+        - required: [user_id]
+    RecommendRequest:
+      type: object
+      additionalProperties: false
+      required: [user_id]
+      properties:
+        user_id: {type: string}
+        domain: {type: string}
+        type: {type: string, default: content}
+        model_id:
+          type: string
+          description: Defaults to the workspace's `default_model_id`, else `cosine-rank-v1`.
+        include:
+          type: array
+          items: {type: string, enum: [metadata, contents]}
+          description: Adds each result's name, type, metadata and/or contents (pictures live on contents).
+        limit: {type: integer, minimum: 1, maximum: 100, default: 20}
+    RerankRequest:
+      type: object
+      additionalProperties: false
+      required: [user_id, candidate_ids]
+      properties:
+        user_id: {type: string}
+        candidate_ids:
+          type: array
+          minItems: 1
+          items: {type: string}
+        model_id:
+          type: string
+          description: |
+            Defaults to the workspace's `default_model_id`, else `cosine-rank-v1`.
+            `hm-user-state-v1` ranks by entity readouts against a looked-up user state, no vectors
+            (see the operation description).
+        include:
+          type: array
+          items: {type: string, enum: [metadata, contents]}
+          description: Adds each result's name, type, metadata and/or contents (pictures live on contents).
+    RerankResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        compiled: {type: object, additionalProperties: true}
+        results:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            required: [entity_id, score]
+            properties:
+              entity_id: {type: string}
+              score: {type: number}
+              name: {type: [string, "null"]}
+              type: {type: string}
+              base: {type: number, description: "Readout-state only. Score before the same-product penalty."}
+              penalty: {type: number, description: "Readout-state only. Same-product penalty subtracted."}
+              contributions:
+                type: array
+                description: Readout-state only. Top per-field terms of the score.
+                items:
+                  type: object
+                  properties:
+                    field: {type: string}
+                    option: {type: string}
+                    lift: {type: number}
+              reason:
+                type: string
+                description: "Readout-state only, e.g. `↑ matches liked: Black, Dress`, `↓ less of: Stripe`, `exploring (cold start)`."
+              metadata: {description: "With `include: [metadata]`."}
+              contents: {type: array, items: {type: object, additionalProperties: true}, description: "With `include: [contents]`."}
+        explain:
+          type: object
+          additionalProperties: true
+          description: |
+            `model_id`, `ranked_by` (`readout_loglik` for readout-state models), and for those also
+            `state_source`, `state_error`, `state_fields` (fields the model state covered),
+            `signals`, `readout_source` (`turbopuffer` / `metadata` counts) and
+            `dropped: { not_found, no_readout }`.
+        meta:
+          type: object
+          additionalProperties: true
+          properties:
+            latency_ms: {type: number}
+            state_source:
+              type: string
+              enum: [model, cache, fallback, pooled]
+              description: |
+                Readout-state only. `model`: fresh from the model server; `cache`: stored state for the
+                same positive interactions; `fallback`: the lookup failed (timeout, error, not
+                configured) and the pooled formula ranked; `pooled`: no positive signal yet.
+    EntityReadout:
+      description: |
+        Convention for entity `metadata.readout` (set with `POST /v1/entity` or `/v1/index`), read by
+        readout-state rankers. One entry per field id (schema v3 field ids/options, e.g. `color`,
+        `product_family`); each entry is one option, a `{option: p}` distribution (normalised on
+        read), or a `[{o, p}]` list. The dashboard's `{fields: [{id, top: [{o, p}]}]}` form is
+        accepted too. Add `metadata.parent_asin` (or `product_id`) for the same-product penalty and
+        `metadata.duration_s` for relative dwell. Written to the Turbopuffer keyword row as attributes
+        on index and by the `text_index` backfill job.
+      oneOf:
+        - type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: object
+                additionalProperties: {type: number, minimum: 0}
+              - type: array
+                items:
+                  type: object
+                  properties:
+                    o: {type: string}
+                    p: {type: number}
+        - type: object
+          required: [fields]
+          properties:
+            fields:
+              type: array
+              items:
+                type: object
+                required: [id, top]
+                properties:
+                  id: {type: string}
+                  block: {type: string}
+                  top:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        o: {type: string}
+                        p: {type: number}
+      example:
+        color: {Black: 0.8, Grey: 0.2}
+        product_family: Dress
+        pattern: [{o: Solid, p: 0.9}, {o: Stripe, p: 0.1}]
+    LinkItem:
+      type: object
+      required: [parent_id, child_id, relation, weight, updated_at]
+      properties:
+        parent_id: {type: string}
+        child_id: {type: string}
+        relation: {type: string}
+        weight: {type: number, minimum: 0, maximum: 1}
+        metadata:
+          $ref: "#/components/schemas/LinkSignalMetadata"
+        updated_at: {type: string, format: date-time}
+    LinkPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LinkItem"
+        next_cursor:
+          oneOf:
+            - {type: string}
+            - {type: "null"}
+    SwarmInput:
+      type: object
+      properties:
+        id: {type: string}
+        name: {type: string}
+        entity_ids:
+          type: array
+          items: {type: string}
+        config:
+          type: object
+          additionalProperties: true
+    JobInput:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [batch_index, calibrate, simulation, connector_sync, cluster, trend_snapshot, landscape, text_index, vector_unindex]
+        payload:
+          type: object
+          additionalProperties: true
+        sync:
+          type: boolean
+          default: false
+    JobUpdateInput:
+      type: object
+      required: [payload]
+      properties:
+        payload:
+          type: object
+          additionalProperties: true
+          description: Replaces the job's payload
     RootResponse:
       type: object
       required: [service, environment, ok]
@@ -580,10 +4238,13 @@ components:
           type: string
     WorkspaceSummary:
       type: object
-      required: [id, name, status, created_at, updated_at]
+      required: [id, public_key, name, status, created_at, updated_at]
       properties:
         id:
           type: string
+        public_key:
+          type: string
+          description: Workspace publishable key (`galya_pk_...`)
         name:
           type: string
         status:
@@ -621,7 +4282,7 @@ components:
           description: Optional public workspace id; generated if omitted
     CreateWorkspaceResponse:
       type: object
-      required: [workspace, api_key, warning]
+      required: [workspace, public_key, api_key, warning]
       properties:
         workspace:
           type: object
@@ -631,6 +4292,9 @@ components:
               type: string
             name:
               type: string
+        public_key:
+          type: string
+          description: Workspace publishable key (`galya_pk_...`); stored and retrievable via admin
         api_key:
           type: string
           description: Workspace secret; shown once
@@ -639,16 +4303,51 @@ components:
     IndexEntityRequest:
       type: object
       properties:
+        model_id:
+          type: string
+          description: |
+            Encoder public id, or a predictor/decoder whose policy `encoder_model_id` is followed.
+            Omit to index with every registry encoder that applies to `domain`.
+        content_id:
+          type: string
+          description: |
+            Public id of the content to write. When present, `entity_id` names the (existing)
+            entity this content represents and no entity is created.
         entity_id:
           type: string
-          description: Public entity id; alias `id`
+          description: |
+            With `content_id`: the entity to link to (must exist). Alone: the one-record
+            shortcut that upserts the entity and a same-id content. Alias `id`.
         id:
           type: string
+        kind:
+          type: string
+          enum: [text, image, audio, video]
+          description: Indexed content modality. Defaults to `image` when only `image_url` is given, else `text`.
+        role:
+          type: string
+          description: Caller-defined role inside the entity, e.g. `description`, `primary_image`
+        weight:
+          type: number
+          minimum: 0
+          default: 1
+          description: Relative weight of this content when the entity vector is composed
+        image_url:
+          type: string
+          format: uri
+          description: Image to encode (SigLIP-style encoders). Also read from `metadata.image_url` in the shortcut shape.
+        text:
+          type: string
+          description: Alias of `content`
         type:
           type: string
           default: content
+          description: Entity type; used only when an entity is upserted (shortcut shape)
         domain:
           type: string
+          description: |
+            Optional when `model_id` names a domain-scoped model (or one whose encoder is);
+            that domain is then implied. A conflicting value is `409 domain_mismatch`.
         name:
           type: string
         content:
@@ -663,15 +4362,27 @@ components:
         metadata:
           type: object
           additionalProperties: true
+          properties:
+            readout:
+              $ref: "#/components/schemas/EntityReadout"
+            parent_asin:
+              type: string
+              description: Product grouping for the readout-state same-product penalty (`product_id` also accepted).
+            duration_s:
+              type: number
+              description: Item (video) length in seconds, for relative dwell.
         embedding:
           type: array
-          minItems: 1024
-          maxItems: 1024
           items:
             type: number
-          description: Exactly 1024 finite numbers when provided
+          description: |
+            Finite numbers. Used when the target encoder allows client embeddings and the
+            length matches that encoder's dimensions. With multiple registry encoders, each
+            encoder uses the embedding only when it fits; the others encode from text.
         embedding_model:
           type: string
+          deprecated: true
+          description: Use `model_id` (encoder) instead
     IndexEntityPublic:
       type: object
       required: [id, type, domain, name, metadata]
@@ -691,12 +4402,36 @@ components:
           additionalProperties: true
     IndexEntityResponse:
       type: object
-      required: [entity, vector_indexed]
+      required: [entity, content, vector_indexed]
       properties:
         entity:
-          $ref: "#/components/schemas/IndexEntityPublic"
+          oneOf:
+            - $ref: "#/components/schemas/IndexEntityPublic"
+            - type: "null"
+          description: The entity this content represents; null for unattached content
+        content:
+          oneOf:
+            - $ref: "#/components/schemas/ContentSummary"
+            - type: "null"
+          description: The content that was written; null when `POST /v1/entity` wrote identity only
+        model_id:
+          type: string
+          description: Primary encoder that received a vector (first successful registry target)
         vector_indexed:
           type: boolean
+        indexes:
+          type: array
+          description: One row per encoder the registry selected for this write
+          items:
+            type: object
+            required: [model_id, vector_indexed]
+            properties:
+              model_id:
+                type: string
+              vector_indexed:
+                type: boolean
+              error:
+                type: string
     EntityDetail:
       type: object
       required:
@@ -715,17 +4450,58 @@ components:
         type:
           type: string
         domain:
-          type: string
-          nullable: true
+          type: [string, "null"]
         name:
-          type: string
-          nullable: true
+          type: [string, "null"]
         content:
-          type: string
-          nullable: true
+          type: [string, "null"]
+          description: Text of the first text content (compatibility mirror of `contents`)
         source_url:
+          type: [string, "null"]
+          description: First content `source_url` (compatibility mirror of `contents`)
+        metadata:
+          type: object
+          additionalProperties: true
+        content_count:
+          type: integer
+          minimum: 0
+        contents:
+          type: array
+          description: Every content linked to this entity
+          items:
+            $ref: "#/components/schemas/ContentSummary"
+        created_at:
           type: string
-          nullable: true
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ContentSummary:
+      type: object
+      required: [id, entity_id, kind, role, weight, domain, name, text, source_url, image_url, metadata, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        entity_id:
+          type: [string, "null"]
+          description: Entity this content represents; null when unattached
+        kind:
+          type: string
+          enum: [text, image, audio, video]
+        role:
+          type: [string, "null"]
+        weight:
+          type: number
+        domain:
+          type: [string, "null"]
+        name:
+          type: [string, "null"]
+        text:
+          type: [string, "null"]
+        source_url:
+          type: [string, "null"]
+        image_url:
+          type: [string, "null"]
         metadata:
           type: object
           additionalProperties: true
@@ -735,18 +4511,105 @@ components:
         updated_at:
           type: string
           format: date-time
+    ContentSingleResponse:
+      type: object
+      required: [content]
+      properties:
+        content:
+          $ref: "#/components/schemas/ContentSummary"
+    ContentListResponse:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContentSummary"
+        next_cursor:
+          type: [string, "null"]
+    EntityContentsResponse:
+      type: object
+      required: [entity_id, items]
+      properties:
+        entity_id:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContentSummary"
+    AttachContentsRequest:
+      type: object
+      properties:
+        content_id:
+          type: string
+        content_ids:
+          type: array
+          items:
+            type: string
+        role:
+          type: string
+        weight:
+          type: number
+          minimum: 0
+    AttachedContent:
+      allOf:
+        - $ref: "#/components/schemas/ContentSummary"
+        - type: object
+          required: [vector_indexes]
+          properties:
+            vector_indexes:
+              type: array
+              description: Encoders whose stored vector rows were retagged to the new owner
+              items:
+                type: string
+    AttachContentsResponse:
+      type: object
+      required: [entity_id, attached, missing]
+      properties:
+        entity_id:
+          type: string
+        attached:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttachedContent"
+        missing:
+          type: array
+          description: Content ids in the request that do not exist
+          items:
+            type: string
+    DetachContentResponse:
+      type: object
+      required: [entity_id, detached]
+      properties:
+        entity_id:
+          type: string
+        detached:
+          $ref: "#/components/schemas/AttachedContent"
     EntitySingleResponse:
       type: object
       required: [entity]
       properties:
         entity:
           $ref: "#/components/schemas/EntityDetail"
+    EntityTypesResponse:
+      type: object
+      required: [types]
+      properties:
+        types:
+          type: array
+          description: Distinct entity types this workspace has used, alphabetical
+          items:
+            type: string
     LinkEntityRequest:
       type: object
       properties:
         content_id:
           type: string
-          description: Child entity id; aliases child_id, entity_id
+          description: |
+            Child *entity* id (the name predates the entity/content split; aliases `child_id`,
+            `entity_id`). This links two entities — a user to a product — and drives the
+            parent's user-state vector. To attach an indexed content to an entity use
+            `POST /v1/entity/{entityId}/contents`.
         child_id:
           type: string
         entity_id:
@@ -754,11 +4617,47 @@ components:
         relation:
           type: string
           default: about
+          description: |
+            Free text. These relations are interaction *signals* read by readout-state rankers
+            (`hm-user-state-v1`): `like`, `unlike`, `save`, `unsave`, `add_to_bag`, `dwell`, `skip`
+            (aliases: `about`/`liked` → like, `saved` → save, `add_to_cart`/`purchase`/`purchased` →
+            add_to_bag, `skipped` → skip). One link per (parent, child, relation): posting it again
+            updates it. like/unlike and save/unsave are toggles, the one set last wins (deleting the
+            `like` link also cancels). `skip`, `unlike` and `unsave` links are not averaged into the
+            composed state vector.
         weight:
           type: number
           minimum: 0
           maximum: 1
           default: 1
+          description: Weight in the composed (weighted-mean) state vector. Readout-state rankers ignore it and use the signal weights of the model policy.
+        metadata:
+          $ref: "#/components/schemas/LinkSignalMetadata"
+        model_id:
+          type: string
+          description: |
+            Latent model (decoder) that recomposes the parent's state vector.
+            Must be an active decoder in the platform or workspace catalog.
+            Omitted uses the workspace compose default.
+    LinkSignalMetadata:
+      type: object
+      additionalProperties: true
+      description: |
+        Signal payload stored on the link (under 4 KB). A `dwell` link needs `dwell_ms` (or `dwell_s`)
+        to count as a signal; a dwell under 1.5 s counts as a fast skip.
+      properties:
+        dwell_ms: {type: number, minimum: 0, description: "Time on screen in ms (`dwell` links)."}
+        dwell_s: {type: number, minimum: 0, description: "Alternative to `dwell_ms`, in seconds."}
+        duration_s:
+          type: number
+          exclusiveMinimum: 0
+          description: Item length in seconds. Falls back to the child entity's `metadata.duration_s`, else 30.
+        at:
+          oneOf:
+            - {type: number, description: "ms epoch"}
+            - {type: string, format: date-time}
+          description: When the interaction happened. Defaults to the link's `updated_at`; orders signals for recency decay.
+      example: {dwell_ms: 8200, duration_s: 21, at: 1793340000000}
     LinkStateReady:
       type: object
       required: [status, history_count]
@@ -790,7 +4689,614 @@ components:
           type: string
         weight:
           type: number
+        metadata:
+          $ref: "#/components/schemas/LinkSignalMetadata"
+        model_id:
+          type: string
+          description: Decoder that composed the parent state vector
         state:
           oneOf:
             - $ref: "#/components/schemas/LinkStateReady"
             - $ref: "#/components/schemas/LinkStatePending"
+    LinkStateCleared:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: cleared
+          description: No links remain; the parent's state vectors were deleted
+    UnlinkEntityResponse:
+      type: object
+      required: [parent_id, child_id, relations, removed, state]
+      properties:
+        parent_id:
+          type: string
+        child_id:
+          type: string
+        relations:
+          type: array
+          items:
+            type: string
+          description: Relations that were removed
+        removed:
+          type: integer
+          minimum: 1
+        model_id:
+          type: string
+          description: Decoder that recomposed the parent state vector
+        state:
+          oneOf:
+            - $ref: "#/components/schemas/LinkStateReady"
+            - $ref: "#/components/schemas/LinkStatePending"
+            - $ref: "#/components/schemas/LinkStateCleared"
+    LandscapePoint:
+      type: object
+      description: One indexed content vector, projected.
+      required: [id, content_id, entity_id, type, domain, name, region_id, x, y, h, neighbors]
+      properties:
+        id:
+          type: string
+          description: Stable point id — the content id, or the entity id for legacy entity-level rows
+        region_id:
+          type: string
+          description: Taste region (hill) the point sits on; matches `LandscapeRegion.id`
+        content_id:
+          type: string
+          nullable: true
+        entity_id:
+          type: string
+          description: Owning entity; empty when the content is unattached
+        type:
+          type: string
+        domain:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        x:
+          type: number
+          description: Map coordinate in [-1, 1]
+        y:
+          type: number
+          description: Map coordinate in [-1, 1]
+        h:
+          type: number
+          description: Terrain height under the point, 0..1
+        neighbors:
+          type: array
+          description: Nearest catalog neighbours by cosine similarity
+          items:
+            type: object
+            required: [id, entity_id, score]
+            properties:
+              id:
+                type: string
+              entity_id:
+                type: string
+              score:
+                type: number
+    LandscapeRegion:
+      type: object
+      description: >-
+        One hill on the landscape. `anchor` regions are the workspace's taste-region clusters; `derived` regions are grouped from the vectors when no anchors exist.
+      required: [id, name, kind, source, x, y, h, radius, member_count]
+      properties:
+        id:
+          type: string
+          description: Anchor public id for `anchor` regions, `region_<n>` for derived ones
+        name:
+          type: string
+          nullable: true
+        kind:
+          type: string
+          nullable: true
+          description: Anchor kind (for example `taste_region`); null for derived regions
+        source:
+          type: string
+          enum: [anchor, derived]
+        x:
+          type: number
+          description: Hill centre, map coordinate in [-1, 1]
+        y:
+          type: number
+          description: Hill centre, map coordinate in [-1, 1]
+        h:
+          type: number
+          description: Terrain height at the hill centre, 0..1
+        radius:
+          type: number
+          description: Hill footprint radius in map units
+        member_count:
+          type: integer
+    LandscapeResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ready, pending, failed, missing]
+        job_id:
+          type: string
+        stage:
+          type: string
+          enum: [pending, running]
+          description: Job queue stage when `status` is `pending` or `failed`
+        started_at:
+          type: string
+          format: date-time
+          description: When the landscape job was enqueued
+        updated_at:
+          type: string
+          format: date-time
+        error:
+          type: string
+        method:
+          type: string
+          example: umap-regions-v1
+        model_id:
+          type: string
+        dimensions:
+          type: integer
+        point_count:
+          type: integer
+        truncated:
+          type: boolean
+          description: True when the index held more vectors than the landscape cap
+        computed_at:
+          type: string
+          format: date-time
+        grid:
+          type: object
+          description: >-
+            Row-major `size × size` terrain heights (0..1) over x,y ∈ [-extent, extent]. One hill per taste region; height grows with the region's member count.
+          required: [size, extent, heights]
+          properties:
+            size:
+              type: integer
+            extent:
+              type: number
+            heights:
+              type: array
+              items:
+                type: number
+        regions:
+          type: array
+          description: Hills, largest first
+          items:
+            $ref: "#/components/schemas/LandscapeRegion"
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/LandscapePoint"
+    StartSessionRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: string
+        session_id:
+          type: string
+          description: Optional caller-chosen id; generated (`ses_*`) when omitted
+    Session:
+      type: object
+      required: [session_id, user_id, status, started_at, request_count]
+      properties:
+        session_id:
+          type: string
+        user_id:
+          type: string
+        status:
+          type: string
+          enum: [active, ended]
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_seen_at:
+          type: string
+          format: date-time
+        request_count:
+          type: integer
+    TrafficCountRow:
+      type: object
+      required: [count]
+      properties:
+        count: {type: integer}
+        errors: {type: integer}
+        p50_latency_ms: {type: integer, nullable: true}
+    TrafficResponse:
+      type: object
+      required: [from, to, bucket, source, totals, previous, series, heatmap, operations, routes, statuses]
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        bucket:
+          type: string
+          enum: [hour, day]
+        source:
+          type: string
+          enum: [all, platform, agent]
+        totals:
+          type: object
+          required: [requests, platform_requests, agent_requests, errors, error_rate, sessions_started, sessions_ended, active_sessions, unique_users, unique_agents]
+          properties:
+            requests: {type: integer}
+            platform_requests: {type: integer}
+            agent_requests: {type: integer}
+            errors: {type: integer}
+            error_rate: {type: number}
+            p50_latency_ms: {type: integer, nullable: true}
+            sessions_started: {type: integer}
+            sessions_ended: {type: integer}
+            active_sessions: {type: integer}
+            unique_users: {type: integer}
+            unique_agents: {type: integer}
+            avg_requests_per_session: {type: number, nullable: true}
+            median_session_seconds: {type: integer, nullable: true}
+        previous:
+          description: Same-length window immediately before `from`, for period-over-period deltas.
+          type: object
+          properties:
+            from: {type: string, format: date-time}
+            to: {type: string, format: date-time}
+            requests: {type: integer}
+            platform_requests: {type: integer}
+            agent_requests: {type: integer}
+            errors: {type: integer}
+            sessions_started: {type: integer}
+            unique_users: {type: integer}
+        series:
+          type: array
+          items:
+            type: object
+            required: [bucket, platform, agent, users, agents, errors]
+            properties:
+              bucket: {type: string}
+              platform: {type: integer}
+              agent: {type: integer}
+              users: {type: integer, description: distinct people seen in the bucket}
+              agents: {type: integer, description: distinct agents seen in the bucket}
+              errors: {type: integer}
+        heatmap:
+          description: Requests by UTC day-of-week (0 = Sunday) and hour.
+          type: array
+          items:
+            type: object
+            properties:
+              dow: {type: integer}
+              hour: {type: integer}
+              count: {type: integer}
+        operations:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/TrafficCountRow"
+              - type: object
+                properties:
+                  op: {type: string}
+                  source: {type: string, enum: [platform, agent]}
+        routes:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/TrafficCountRow"
+              - type: object
+                properties:
+                  route: {type: string, example: "POST /v1/query"}
+        statuses:
+          type: array
+          items:
+            type: object
+            properties:
+              klass: {type: string, example: "2xx"}
+              count: {type: integer}
+        people:
+          nullable: true
+          type: object
+          properties:
+            top_users:
+              type: array
+              items:
+                type: object
+                properties:
+                  user_id: {type: string}
+                  sessions: {type: integer}
+                  requests: {type: integer}
+                  last_seen: {type: string, format: date-time}
+            session_length:
+              type: array
+              items:
+                type: object
+                properties:
+                  bucket: {type: string, enum: [under_1m, 1_to_5m, 5_to_15m, 15_to_60m, over_1h]}
+                  count: {type: integer}
+            requests_per_session:
+              type: array
+              items:
+                type: object
+                properties:
+                  bucket: {type: string, enum: ["0", "1_2", "3_5", "6_10", "11_plus"]}
+                  count: {type: integer}
+            new_vs_returning:
+              type: object
+              properties:
+                new: {type: integer}
+                returning: {type: integer}
+        agents:
+          nullable: true
+          type: object
+          properties:
+            by_access:
+              type: array
+              items:
+                type: object
+                properties:
+                  access: {type: string, enum: [key, mpp, x402]}
+                  count: {type: integer}
+            by_op:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/TrafficCountRow"
+                  - type: object
+                    properties:
+                      op: {type: string}
+            by_domain:
+              type: array
+              items:
+                type: object
+                properties:
+                  domain: {type: string}
+                  count: {type: integer}
+            top_agents:
+              type: array
+              items:
+                type: object
+                properties:
+                  agent_ref: {type: string}
+                  requests: {type: integer}
+                  errors: {type: integer}
+                  last_seen: {type: string, format: date-time}
+            top_keys:
+              type: array
+              items:
+                type: object
+                properties:
+                  key_id: {type: string}
+                  name: {type: string}
+                  prefix: {type: string}
+                  revoked: {type: boolean}
+                  requests: {type: integer}
+                  errors: {type: integer}
+                  last_seen: {type: string, format: date-time}
+    AgenticSearchOp:
+      type: string
+      enum: [search, recommend, rerank, traverse, get_entity]
+    AgenticSearchConfig:
+      type: object
+      required: [enabled, name, description, allowed_ops, allowed_domains, allowed_types, default_model_id, max_results, max_hops, expose_metadata, paid_access_enabled, payment_methods]
+      properties:
+        enabled: {type: boolean}
+        name: {type: string}
+        description: {type: string, description: Shown to agents in the manifest}
+        allowed_ops:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgenticSearchOp"
+        allowed_domains:
+          type: array
+          items: {type: string}
+          description: Empty means every domain
+        allowed_types:
+          type: array
+          items: {type: string}
+          description: Empty means every entity type
+        default_model_id: {type: string}
+        max_results: {type: integer, minimum: 1, maximum: 200}
+        max_hops: {type: integer, minimum: 1, maximum: 4}
+        expose_metadata: {type: boolean}
+        rate_limit_per_minute: {type: integer, nullable: true}
+        paid_access_enabled: {type: boolean}
+        price_atomic: {type: string, nullable: true, description: Smallest unit of `currency`}
+        currency: {type: string, nullable: true}
+        payee: {type: string, nullable: true}
+        payment_methods:
+          type: array
+          items:
+            type: string
+            enum: [mpp, x402]
+        updated_at: {type: string, format: date-time, nullable: true}
+    AgenticSearchConfigPatch:
+      type: object
+      description: Any subset of AgenticSearchConfig fields (except updated_at)
+      properties:
+        enabled: {type: boolean}
+        name: {type: string}
+        description: {type: string}
+        allowed_ops:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgenticSearchOp"
+        allowed_domains:
+          type: array
+          items: {type: string}
+        allowed_types:
+          type: array
+          items: {type: string}
+        default_model_id: {type: string}
+        max_results: {type: integer}
+        max_hops: {type: integer}
+        expose_metadata: {type: boolean}
+        rate_limit_per_minute: {type: integer, nullable: true}
+        paid_access_enabled: {type: boolean}
+        price_atomic: {type: string, nullable: true}
+        currency: {type: string, nullable: true}
+        payee: {type: string, nullable: true}
+        payment_methods:
+          type: array
+          items:
+            type: string
+            enum: [mpp, x402]
+    AgentKey:
+      type: object
+      required: [id, name, prefix, created_at]
+      properties:
+        id: {type: string, description: "`agk_*`"}
+        name: {type: string}
+        prefix: {type: string, description: First 18 characters of the secret}
+        created_at: {type: string, format: date-time}
+        last_used_at: {type: string, format: date-time, nullable: true}
+        revoked_at: {type: string, format: date-time, nullable: true}
+    AgenticSearchManifest:
+      type: object
+      required: [workspace_id, name, description, enabled, endpoint, auth, capabilities, domains, entity_types, limits, tools]
+      properties:
+        workspace_id: {type: string}
+        name: {type: string}
+        description: {type: string}
+        enabled: {type: boolean}
+        endpoint: {type: string, format: uri}
+        manifest_url: {type: string, format: uri}
+        auth:
+          type: object
+          additionalProperties: true
+        capabilities:
+          type: array
+          items:
+            type: object
+            required: [op, description]
+            properties:
+              op:
+                $ref: "#/components/schemas/AgenticSearchOp"
+              description: {type: string}
+        domains:
+          type: array
+          items: {type: string}
+        entity_types:
+          type: array
+          items: {type: string}
+        limits:
+          type: object
+          additionalProperties: true
+        expose_metadata: {type: boolean}
+        tools:
+          type: array
+          description: MCP-style tool definitions
+          items:
+            type: object
+            additionalProperties: true
+    AgenticSearchRequest:
+      type: object
+      required: [op]
+      properties:
+        op:
+          $ref: "#/components/schemas/AgenticSearchOp"
+        user_id: {type: string, description: Required for search, recommend: '', rerank: ''}
+        domain:
+          type: string
+          description: |
+            Catalog slice for search and recommend. Optional when the model chain implies a
+            domain (predictor `domain`, else its encoder's `domain`); a conflicting value is
+            `409 domain_mismatch`. When the workspace restricts `allowed_domains`, an unscoped
+            model still needs an explicit domain (`400 domain_required`).
+        type: {type: string, description: Entity type for recommend}
+        candidate_ids:
+          type: array
+          items: {type: string}
+          description: Required for rerank
+        entity_id: {type: string, description: Required for get_entity}
+        seed_entity_id: {type: string, description: Required for traverse}
+        relation: {type: string}
+        depth: {type: integer, description: Clamped to max_hops}
+        limit: {type: integer, description: Clamped to max_results}
+        model_id: {type: string, description: Defaults to the policy's default_model_id}
+    AgenticSearchResponse:
+      type: object
+      required: [op, access]
+      properties:
+        op:
+          $ref: "#/components/schemas/AgenticSearchOp"
+        domain: {type: string, nullable: true}
+        access:
+          type: string
+          enum: [key, mpp, x402]
+        results:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        scores:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        graph:
+          type: object
+          additionalProperties: true
+        entity:
+          type: object
+          additionalProperties: true
+        explain:
+          type: object
+          additionalProperties: true
+        meta:
+          type: object
+          additionalProperties: true
+        policy:
+          type: object
+          additionalProperties: true
+    PaymentRequiredBody:
+      type: object
+      required: [error, message, methods, challenges]
+      properties:
+        error: {type: string, const: payment_required}
+        message: {type: string}
+        price_atomic: {type: string}
+        currency: {type: string}
+        payee: {type: string}
+        methods:
+          type: array
+          items:
+            type: string
+            enum: [mpp, x402]
+        challenges:
+          type: object
+          additionalProperties: true
+    ConnectorDefinition:
+      type: object
+      required: [public_id, name, description, category, status]
+      properties:
+        public_id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        status:
+          type: string
+        branding:
+          type: object
+          additionalProperties: true
+        links:
+          type: object
+          additionalProperties: true
+        auth:
+          type: object
+          additionalProperties: true
+        config_schema:
+          type: object
+          additionalProperties: true
+        capabilities:
+          type: object
+          additionalProperties: true
