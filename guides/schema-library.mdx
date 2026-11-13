@@ -1,0 +1,513 @@
+---
+title: Schema library
+description: "Default Galya schemas for fashion, travel, hospitality, tech, watches, trading cards and video games. Use one as-is or adapt it: a schema is a prompt the model answers for every item."
+---
+
+The model is promptable. A [schema](/guides/schemas) is the prompt: a set of questions, each with its options, that the model answers for every item from its image and text. Change the questions and you change what Galya reads and ranks on, in any domain.
+
+These default schemas cover common domains. Use one as-is, add your own questions (up to 64), or edit the options. Each edit makes a new content-addressed schema, and the old one keeps working.
+
+| Domain | For | Schema |
+| --- | --- | --- |
+| [Fashion and apparel](#fashion-and-apparel) | Clothing, shoes, bags, accessories | `galya-commerce-v3` |
+| [Travel](#travel) | Destinations, tours, packages, experiences | [`travel`](#travel) |
+| [Hospitality](#hospitality) | Hotels, rentals, restaurants | [`hospitality`](#hospitality) |
+| [Tech and electronics](#tech-and-electronics) | Phones, laptops, audio, wearables, smart home | [`tech`](#tech-and-electronics) |
+| [Watches](#watches) | Mechanical, quartz and smart watches | [`watches`](#watches) |
+| [Trading cards](#trading-cards) | Singles, sealed product, graded slabs | [`trading-cards`](#trading-cards) |
+| [Video games](#video-games) | Games, DLC, bundles | [`video-games`](#video-games) |
+
+Send a schema by id, or send its definition inline on any item or user call. Galya stores an inline definition the first time and returns its id as `schema_id`:
+
+```bash
+curl https://api.galya.io/v1/item \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "schema": { "name": "watches", "base": null, "questions": [ ... ] }, "items": [ ... ] }'
+```
+
+## Fashion and apparel
+
+Clothing, shoes, bags, accessories. Send it by id. Its 219 fields include `color`, `product_family`, `pattern` and `silhouette`.
+
+```json
+{ "schema": "galya-commerce-v3" }
+```
+
+## Travel
+
+Destinations, tours, packages, experiences. Readout fields: `q:trip_type`, `q:pace`, `q:budget`, `q:climate`, `q:traveler`, `q:duration`.
+
+<Accordion title="Definition">
+
+```json
+{
+  "name": "travel",
+  "base": null,
+  "questions": [
+    {
+      "id": "trip_type",
+      "text": "What kind of trip is this?",
+      "options": [
+        "Beach",
+        "City break",
+        "Adventure",
+        "Cultural",
+        "Wellness",
+        "Family",
+        "Road trip",
+        "Cruise"
+      ]
+    },
+    {
+      "id": "pace",
+      "text": "How packed is the itinerary?",
+      "options": [
+        "Relaxed",
+        "Balanced",
+        "Packed"
+      ]
+    },
+    {
+      "id": "budget",
+      "text": "What budget is it for?",
+      "options": [
+        "Budget",
+        "Mid-range",
+        "Premium",
+        "Luxury"
+      ]
+    },
+    {
+      "id": "climate",
+      "text": "What is the climate like?",
+      "options": [
+        "Tropical",
+        "Temperate",
+        "Cold",
+        "Desert",
+        "Varied"
+      ]
+    },
+    {
+      "id": "traveler",
+      "text": "Who is it best for?",
+      "options": [
+        "Solo",
+        "Couple",
+        "Family",
+        "Group",
+        "Business"
+      ]
+    },
+    {
+      "id": "duration",
+      "text": "How long is the trip?",
+      "options": [
+        "Day trip",
+        "Weekend",
+        "One week",
+        "Two weeks or more"
+      ]
+    }
+  ]
+}
+```
+
+</Accordion>
+
+## Hospitality
+
+Hotels, rentals, restaurants. Readout fields: `q:property_style`, `q:atmosphere`, `q:price_tier`, `q:setting`, `q:highlight`.
+
+<Accordion title="Definition">
+
+```json
+{
+  "name": "hospitality",
+  "base": null,
+  "questions": [
+    {
+      "id": "property_style",
+      "text": "What kind of place is this?",
+      "options": [
+        "Boutique hotel",
+        "Resort",
+        "Business hotel",
+        "Hostel",
+        "Vacation rental",
+        "Bed and breakfast",
+        "Restaurant"
+      ]
+    },
+    {
+      "id": "atmosphere",
+      "text": "What is the atmosphere like?",
+      "options": [
+        "Lively",
+        "Quiet",
+        "Romantic",
+        "Family-friendly",
+        "Design-led"
+      ]
+    },
+    {
+      "id": "price_tier",
+      "text": "What price tier is it?",
+      "options": [
+        "Budget",
+        "Mid-range",
+        "Premium",
+        "Luxury"
+      ]
+    },
+    {
+      "id": "setting",
+      "text": "Where is it set?",
+      "options": [
+        "City center",
+        "Beachfront",
+        "Countryside",
+        "Mountains",
+        "Near the airport"
+      ]
+    },
+    {
+      "id": "highlight",
+      "text": "What stands out most?",
+      "options": [
+        "Spa and wellness",
+        "Food and drink",
+        "Pool",
+        "Workspace",
+        "Views",
+        "Pet-friendly"
+      ]
+    }
+  ]
+}
+```
+
+</Accordion>
+
+## Tech and electronics
+
+Phones, laptops, audio, wearables, smart home. Readout fields: `q:category`, `q:user_level`, `q:price_tier`, `q:design`, `q:priority`.
+
+<Accordion title="Definition">
+
+```json
+{
+  "name": "tech",
+  "base": null,
+  "questions": [
+    {
+      "id": "category",
+      "text": "What kind of product is this?",
+      "options": [
+        "Phone",
+        "Laptop",
+        "Tablet",
+        "Audio",
+        "Wearable",
+        "Camera",
+        "Smart home",
+        "Gaming hardware",
+        "Accessory"
+      ]
+    },
+    {
+      "id": "user_level",
+      "text": "Who is it made for?",
+      "options": [
+        "Everyday user",
+        "Enthusiast",
+        "Professional"
+      ]
+    },
+    {
+      "id": "price_tier",
+      "text": "What price tier is it?",
+      "options": [
+        "Budget",
+        "Mid-range",
+        "Premium",
+        "Flagship"
+      ]
+    },
+    {
+      "id": "design",
+      "text": "What is the design like?",
+      "options": [
+        "Minimal",
+        "Rugged",
+        "Premium materials",
+        "Colorful",
+        "Retro"
+      ]
+    },
+    {
+      "id": "priority",
+      "text": "What is it built for above all?",
+      "options": [
+        "Performance",
+        "Battery life",
+        "Portability",
+        "Value",
+        "Ecosystem"
+      ]
+    }
+  ]
+}
+```
+
+</Accordion>
+
+## Watches
+
+Mechanical, quartz and smart watches. Readout fields: `q:watch_style`, `q:movement`, `q:case_material`, `q:dial_color`, `q:case_size`, `q:price_tier`.
+
+<Accordion title="Definition">
+
+```json
+{
+  "name": "watches",
+  "base": null,
+  "questions": [
+    {
+      "id": "watch_style",
+      "text": "What style of watch is this?",
+      "options": [
+        "Dress",
+        "Diver",
+        "Pilot",
+        "Field",
+        "Chronograph",
+        "Sports",
+        "Smartwatch",
+        "Fashion"
+      ]
+    },
+    {
+      "id": "movement",
+      "text": "What movement does it use?",
+      "options": [
+        "Automatic",
+        "Manual wind",
+        "Quartz",
+        "Smart"
+      ]
+    },
+    {
+      "id": "case_material",
+      "text": "What is the case made of?",
+      "options": [
+        "Steel",
+        "Gold",
+        "Titanium",
+        "Ceramic",
+        "Bronze",
+        "Resin"
+      ]
+    },
+    {
+      "id": "dial_color",
+      "text": "What color is the dial?",
+      "options": [
+        "Black",
+        "White",
+        "Blue",
+        "Green",
+        "Silver",
+        "Other"
+      ]
+    },
+    {
+      "id": "case_size",
+      "text": "How large is the case?",
+      "options": [
+        "Under 36 mm",
+        "36 to 40 mm",
+        "40 to 44 mm",
+        "Over 44 mm"
+      ]
+    },
+    {
+      "id": "price_tier",
+      "text": "What price tier is it?",
+      "options": [
+        "Entry",
+        "Mid-range",
+        "Luxury",
+        "Haute horlogerie"
+      ]
+    }
+  ]
+}
+```
+
+</Accordion>
+
+## Trading cards
+
+Singles, sealed product, graded slabs. Readout fields: `q:game`, `q:product_kind`, `q:rarity`, `q:condition`, `q:appeal`, `q:era`.
+
+<Accordion title="Definition">
+
+```json
+{
+  "name": "trading-cards",
+  "base": null,
+  "questions": [
+    {
+      "id": "game",
+      "text": "Which game or sport is this card from?",
+      "options": [
+        "Pokémon",
+        "Magic: The Gathering",
+        "Yu-Gi-Oh!",
+        "Sports",
+        "Other"
+      ]
+    },
+    {
+      "id": "product_kind",
+      "text": "What kind of product is this?",
+      "options": [
+        "Single card",
+        "Booster pack",
+        "Booster box",
+        "Graded slab",
+        "Other sealed product"
+      ]
+    },
+    {
+      "id": "rarity",
+      "text": "How rare is it?",
+      "options": [
+        "Common",
+        "Uncommon",
+        "Rare",
+        "Ultra rare",
+        "Secret rare"
+      ]
+    },
+    {
+      "id": "condition",
+      "text": "What condition is it in?",
+      "options": [
+        "Mint",
+        "Near mint",
+        "Lightly played",
+        "Played",
+        "Damaged"
+      ]
+    },
+    {
+      "id": "appeal",
+      "text": "Why would a collector want it?",
+      "options": [
+        "To play",
+        "To collect",
+        "As an investment",
+        "Nostalgia",
+        "For the art"
+      ]
+    },
+    {
+      "id": "era",
+      "text": "What era is it from?",
+      "options": [
+        "Vintage",
+        "Modern",
+        "Current set"
+      ]
+    }
+  ]
+}
+```
+
+</Accordion>
+
+## Video games
+
+Games, DLC, bundles. Readout fields: `q:genre`, `q:play_mode`, `q:session_length`, `q:art_style`, `q:tone`, `q:difficulty`.
+
+<Accordion title="Definition">
+
+```json
+{
+  "name": "video-games",
+  "base": null,
+  "questions": [
+    {
+      "id": "genre",
+      "text": "What genre is this game?",
+      "options": [
+        "Action",
+        "Adventure",
+        "RPG",
+        "Shooter",
+        "Strategy",
+        "Sports",
+        "Racing",
+        "Puzzle",
+        "Simulation",
+        "Platformer"
+      ]
+    },
+    {
+      "id": "play_mode",
+      "text": "How is it played?",
+      "options": [
+        "Single-player",
+        "Co-op",
+        "Competitive multiplayer",
+        "MMO"
+      ]
+    },
+    {
+      "id": "session_length",
+      "text": "How long is a typical session?",
+      "options": [
+        "Quick sessions",
+        "Medium sessions",
+        "Long sessions"
+      ]
+    },
+    {
+      "id": "art_style",
+      "text": "What is the art style?",
+      "options": [
+        "Realistic",
+        "Stylized",
+        "Pixel art",
+        "Anime",
+        "Cartoon"
+      ]
+    },
+    {
+      "id": "tone",
+      "text": "What is the tone?",
+      "options": [
+        "Lighthearted",
+        "Dark",
+        "Cozy",
+        "Intense",
+        "Story-driven"
+      ]
+    },
+    {
+      "id": "difficulty",
+      "text": "How hard is it?",
+      "options": [
+        "Casual",
+        "Moderate",
+        "Hard"
+      ]
+    }
+  ]
+}
+```
+
+</Accordion>
