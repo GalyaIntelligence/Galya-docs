@@ -1,0 +1,156 @@
+---
+title: Users
+description: "Everything about a shopper in one call: POST /v1/user records plain-language interactions, ranks, searches or recommends by taste, and returns the taste profile."
+api: "POST /v1/user"
+---
+
+`POST /v1/user` is the one call for a shopper. In a single request it can record what they did, rank items for them and return their taste. Each part is optional except `user_id` and `schema`. Unknown users are created on first call.
+
+<ParamField body="user_id" type="string" required>
+  Your id for the shopper, up to 128 characters. An anonymous client id is fine; see [merging](#anonymous-to-signed-in).
+</ParamField>
+
+<ParamField body="schema" type="string | object" required>
+  The [schema](/guides/schemas) to read taste and rank through: an id or an inline definition.
+</ParamField>
+
+<ParamField body="interactions" type="object[]">
+  Up to 500 interactions to record. Applied before this call's ranking.
+
+  <Expandable title="interaction">
+    <ParamField body="item_id" type="string" required>
+      The item it happened to.
+    </ParamField>
+    <ParamField body="tag" type="string" required>
+      What happened, in plain language: `"viewed"`, `"liked"`, `"saved"`, `"added to bag"`, `"bought"`, `"skipped"`, `"unliked"`.
+    </ParamField>
+    <ParamField body="id" type="string">
+      Idempotency key. A repeated id is not counted twice, so retries are safe.
+    </ParamField>
+    <ParamField body="at" type="string">
+      ISO 8601 time. Defaults to when Galya receives it.
+    </ParamField>
+    <ParamField body="dwell_ms" type="integer">
+      How long the shopper looked. A long view counts as a positive signal.
+    </ParamField>
+    <ParamField body="context" type="object">
+      Where it happened: `surface` (`collection`, `search`, `pdp`, `cart`, `feed`, ...), `screen_id`, `query`, `session_id`, and `position` (`x`, `y`, `area` as fractions of the viewport, `index`).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="rank" type="object">
+  Rank items for this shopper. See [Rank](#rank).
+</ParamField>
+
+<ParamField body="include" type="string[]">
+  `taste` adds the shopper's taste profile. `item` adds each ranked item's title, image and metadata.
+</ParamField>
+
+<ParamField body="merge_from" type="string[]">
+  Up to 10 earlier user ids (for example anonymous ones) whose history moves into `user_id`.
+</ParamField>
+
+<RequestExample>
+
+```bash
+curl https://api.galya.io/v1/user \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "shopper_1",
+    "schema": "galya-commerce-v3",
+    "interactions": [
+      { "id": "evt_1", "item_id": "sku_wrap_dress", "tag": "viewed", "dwell_ms": 12000, "context": { "surface": "collection" } },
+      { "id": "evt_2", "item_id": "sku_wrap_dress", "tag": "added to bag" }
+    ],
+    "rank": { "item_ids": ["sku_ankle_boot", "sku_linen_shirt", "sku_slip_skirt"], "limit": 3 },
+    "include": ["taste"]
+  }'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "user_id": "shopper_1",
+  "schema_id": "galya-commerce-v3",
+  "interactions": [
+    { "id": "evt_1", "item_id": "sku_wrap_dress", "tag": "viewed", "read_as": "dwell", "status": "recorded" },
+    { "id": "evt_2", "item_id": "sku_wrap_dress", "tag": "added to bag", "read_as": "add_to_bag", "status": "recorded" }
+  ],
+  "ranked": [
+    { "item_id": "sku_slip_skirt", "score": 0.42, "reasons": [{ "field": "color", "option": "Black", "lift": 0.31 }] },
+    { "item_id": "sku_ankle_boot", "score": 0.18, "reasons": [{ "field": "color", "option": "Black", "lift": 0.16 }] },
+    { "item_id": "sku_linen_shirt", "score": -0.07, "reasons": [] }
+  ],
+  "taste": { "summary": "Black, Wrap, Midi", "evidence": 2.5, "fields": [] },
+  "meta": { "model_version": "galya-natural-language-commerce@2026-10", "state_source": "model", "latency_ms": 38 }
+}
+```
+
+</ResponseExample>
+
+## Interactions
+
+Tags are plain language. Galya reads each one as a known signal, returned as `read_as`, and keeps your text:
+
+| `read_as` | Example tags | Effect on taste |
+| --- | --- | --- |
+| `like`, `save` | liked, saved, wishlisted | Toward the item |
+| `add_to_bag`, `purchase` | added to bag, bought | Strongly toward the item |
+| `dwell` | viewed, with `dwell_ms` | Toward the item, more for longer looks |
+| `skip`, `unlike`, `unsave` | skipped, unliked | Away from the item |
+| `view`, `impression`, `other` | viewed without dwell, shown, anything else | Stored; no effect on taste yet |
+
+Each interaction comes back with a `status`:
+
+- `recorded` — stored.
+- `duplicate` — an interaction with this `id` was already stored; not counted again.
+- `item_pending` — stored; it counts once the item's readout is ready.
+- `item_unknown` — not stored. [Upsert the item](/guides/items) first.
+
+## Rank
+
+`rank` picks its mode from what you pass:
+
+| You pass | It does |
+| --- | --- |
+| `item_ids` (up to 1000) | Reranks exactly those items |
+| `query` | Searches the catalog (`"black boots for work"`) and ranks the matches by taste |
+| neither | Recommends from the whole catalog |
+
+- `where` narrows any mode, with the [`GET /v1/item` grammar](/guides/items#filter-the-catalog): `{ "limit": 8, "where": "product_family = \"Dress\"" }`.
+- `limit` defaults to 20 (up to 1000).
+- `exclude_interacted: true` drops items the shopper already bought or added to bag.
+
+Items that can't be scored are listed under `not_ranked`: `not_found` for unknown ids, `pending` while an item's readout for the schema is still being made.
+
+[`POST /v1/rerank`](/guides/rerank), [`POST /v1/recommend`](/guides/recommend) and [`POST /v1/search`](/guides/search) are shortcuts for these modes.
+
+## Taste
+
+`include: ["taste"]` returns the shopper's taste through the call's schema: per field the top options with `p` and `lift` (how much more than the catalog baseline, 1 = no preference), an overall `evidence` (0 = no history yet), and a one-line `summary`.
+
+Read it without recording or ranking anything:
+
+```bash
+curl "https://api.galya.io/v1/user/shopper_1?schema=galya-commerce-v3&include=interactions" \
+  -H "X-API-Key: $GALYA_API_KEY"
+```
+
+`meta.state_source` says how taste was computed for the call: `model` (fresh from the model), `cache` (unchanged history), `pooled` (the model was busy or unavailable; pooled taste was used and the model result is cached for the next call) or `cold_start` (no history yet).
+
+## Anonymous to signed in
+
+Track a visitor under an anonymous id, then pass it in `merge_from` on the first call with their account id. Their history moves over and counts toward the signed-in user.
+
+```json
+{ "user_id": "customer_8812", "merge_from": ["anon_5f2c"], "schema": "galya-commerce-v3" }
+```
+
+## Erase a user
+
+`DELETE /v1/user/{userId}` deletes the user, their interactions and their cached taste, for privacy requests such as Shopify `customers/redact`. It cannot be undone.

@@ -1,0 +1,50 @@
+---
+title: Readouts and taste
+description: "How Galya works: the model reads each item into a readout (a probability per option for every schema field), and a shopper's taste is computed from the readouts of what they interacted with."
+---
+
+## Readouts
+
+When you upsert an item, the model looks at its image and text and answers every question in the [schema](/guides/schemas). Each answer is a probability per option. Together they are the item's **readout**:
+
+```json
+{
+  "color": { "Black": 0.82, "Navy": 0.12, "Grey": 0.06 },
+  "product_family": { "Dress": 0.97, "Skirt": 0.03 },
+  "silhouette": { "Wrap": 0.74, "A-line": 0.2, "Sheath": 0.06 },
+  "q:occasion": { "Work": 0.61, "Party": 0.27, "Everyday": 0.12 }
+}
+```
+
+The readout is the index. There is no separate indexing step and nothing to embed: once an item is `ready` for a schema, it can be ranked, filtered and searched through that schema.
+
+- The built-in `galya-commerce-v3` schema has 219 trained fashion fields (`color`, `product_family`, `silhouette`, `pattern`, `material`, and so on).
+- Your own questions show up as `q:<id>` fields.
+- One item can carry readouts for any number of schemas. Each is read once and reused until the item's `text` or `image_url` changes.
+- You can [supply a readout yourself](/guides/items#bring-your-own-readout) and skip the model.
+
+## Taste
+
+A shopper's **taste** is a distribution over the same fields, computed from the readouts of the items they interacted with:
+
+- Positive interactions (liked, saved, added to bag, bought, long views) pull taste toward that item's options. Stronger signals count more: adding to bag counts more than a like.
+- Negative ones (skipped, unliked) push away from them.
+- Recent interactions count more than old ones.
+- The model then refines the pooled taste from the whole history: what this combination of interactions says about the shopper, beyond each item on its own.
+
+Taste is computed at query time, through whichever schema the call names, so interactions never need re-recording when you add a schema. It is cached per interaction history and refreshed in the background after new interactions; `meta.state_source` says which you got.
+
+## Ranking
+
+An item's score for a shopper is how much more likely its readout is under their taste than under the catalog as a whole, summed over fields. Items that share a `metadata.product_id` with something the shopper just interacted with are pushed down, so a page does not fill with variants of one product.
+
+Every ranked item carries `reasons`: the fields and options that lifted it most.
+
+```json
+{ "item_id": "sku_ankle_boot", "score": 0.42, "reasons": [
+  { "field": "color", "option": "Black", "lift": 0.31 },
+  { "field": "material", "option": "Leather", "lift": 0.11 }
+] }
+```
+
+A shopper with no interactions yet gets `score: 0` for every item, in the order you sent (or catalog order), so you can always render the result.

@@ -1,40 +1,53 @@
 ---
 title: Recommend
-description: "Recommend catalog entities that match one person's taste with the Galya recommend API, filtered by entity type, with an interactive playground."
+description: "Recommend from the whole catalog for one shopper with POST /v1/recommend: the top items for their taste, with near-duplicates of what they just saw pushed down."
 api: "POST /v1/recommend"
 ---
 
-Returns entities of a given type that sit near the person’s taste. Use it when you want a feed, not a rerank of a list you already have.
-
-This playground posts to `https://dev.api.galya.io/v1/recommend`.
+The top items in your catalog for one shopper's taste. Every item with a readout is a candidate; there is no retrieval step to tune. Items sharing a `metadata.product_id` with something the shopper just interacted with are pushed down, so the list is not all variants of one product. This is the shortcut for [`POST /v1/user`](/guides/users#rank) with `rank` and no `item_ids`.
 
 <ParamField body="user_id" type="string" required>
-  Person to recommend for. They need [links](/guides/link) or the result has nothing to stand on.
+  The shopper to recommend for.
 </ParamField>
 
-<ParamField body="type" type="string" default="content">
-  Entity type to return, such as `product`.
+<ParamField body="limit" type="integer" default="20">
+  1 to 100.
 </ParamField>
 
-<ParamField body="domain" type="string">
-  Catalog slice to stay inside.
-</ParamField>
-
-<ParamField body="limit" type="number" default="20">
-  How many entities to return.
-</ParamField>
-
-<ParamField body="model_id" type="string" default="cosine-rank-v1">
-  Scoring model. See [Models](/guides/models).
+<ParamField body="include" type="string[]">
+  `metadata` adds each result's name and metadata.
 </ParamField>
 
 <RequestExample>
 
 ```bash
-curl https://dev.api.galya.io/v1/recommend \
+curl https://api.galya.io/v1/recommend \
   -H "X-API-Key: $GALYA_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"user_demo","type":"product","limit":10}'
+  -d '{"user_id": "shopper_1", "limit": 10, "include": ["metadata"]}'
 ```
 
 </RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "results": [
+    { "entity_id": "sku_slip_skirt", "score": 0.42, "contributions": [{ "field": "color", "option": "Black", "lift": 0.31 }], "reason": "↑ matches liked: Black, Skirt" }
+  ],
+  "meta": { "state_source": "cache" }
+}
+```
+
+</ResponseExample>
+
+To narrow recommendations (one category, one vendor, in stock only), or to drop items the shopper already bought, use [`POST /v1/user`](/guides/users#rank) with `rank.where` and `rank.exclude_interacted`:
+
+```json
+{
+  "user_id": "shopper_1",
+  "schema": "galya-commerce-v3",
+  "rank": { "limit": 8, "where": "product_family = \"Dress\" AND metadata.in_stock = true", "exclude_interacted": true }
+}
+```

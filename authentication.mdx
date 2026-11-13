@@ -1,48 +1,42 @@
 ---
 title: Authentication
-description: "How Galya API keys work: workspace secret, publishable, account, and agent keys, the headers to send, and where your provisioned keys live in the dashboard."
+description: "How Galya API keys work: workspace secret, publishable, account and agent keys, the headers to send, and where your keys live in the dashboard."
 ---
 
-Send a key on every API call except public metadata:
+Send a key on every call:
 
 - Header: `X-API-Key: galya_sk_...`
 - Or: `Authorization: Bearer galya_sk_...`
 
-The playground on these docs asks for that header. Paste a workspace secret. Requests go to `https://dev.api.galya.io`.
+The playground in these docs asks for the same header. Paste a workspace secret; requests go to `https://api.galya.io`.
 
 <Note>
-  Keys are issued when Galya provisions your workspace. There is no self-serve sign-up. If you don't have a workspace yet, email [hello@galya.io](mailto:hello@galya.io) about a [pilot](https://www.galya.io/pilot/).
+  Keys are issued when Galya sets up your workspace. There is no self-serve sign-up. If you don't have a workspace yet, email [hello@galya.io](mailto:hello@galya.io) about a [pilot](https://www.galya.io/pilot/).
 </Note>
 
 ## Keys
 
 | Key | Prefix | Use it for | Where to find it |
 | --- | --- | --- | --- |
-| Workspace secret | `galya_sk_` | Server calls for one workspace | [API keys](https://app.galya.io/api-keys), or Get started → **Copy your workspace keys** |
-| Workspace publishable | `galya_pk_` | Browser use. It identifies the workspace and is not a server secret. | [API keys](https://app.galya.io/api-keys) |
+| Workspace secret | `galya_sk_` | Server calls for one workspace | [API keys](https://app.galya.io/api-keys) |
+| Workspace publishable | `galya_pk_` | Identifying the workspace in a browser. Not a secret. | [API keys](https://app.galya.io/api-keys) |
 | Account | `galya_ak_` | Server calls across workspaces. Also send `X-Galya-Workspace-Id`. | [Settings](https://app.galya.io/settings) |
-| Agent | `galya_ag_` | [Agentic search](/guides/agentic-search) only | Created with the agentic search keys API |
+| Agent | `galya_ag_` | [Agentic search](/guides/agentic-search) only | Created with `POST /v1/agentic-search/keys` |
 
 <Warning>
-  The secret is shown in full once, on the dashboard, in the browser session that created it. If you only see a prefix, create a new secret on [API keys](https://app.galya.io/api-keys). Do not put a secret in a browser app.
+  A secret is shown in full once, in the browser session that created it. If you only see a prefix, create a new secret on [API keys](https://app.galya.io/api-keys). Never put a secret in a browser app; call Galya from your server.
 </Warning>
 
 ## Workspace id header
 
-A workspace secret is already bound to one workspace. Omit `X-Galya-Workspace-Id`.
+A workspace secret is bound to one workspace, so omit `X-Galya-Workspace-Id`.
 
-An account key is not. Send the workspace’s public id:
+An account key is not. Send the workspace's public id with it:
 
 ```bash
-curl https://dev.api.galya.io/v1/entities \
-  -H "X-API-Key: $GALYA_API_KEY" \
+curl "https://api.galya.io/v1/schemas" \
+  -H "X-API-Key: $GALYA_ACCOUNT_KEY" \
   -H "X-Galya-Workspace-Id: wsp_..."
 ```
 
-If the header does not match the key’s workspace, the API returns `403` with `workspace_mismatch`.
-
-## Dashboard
-
-Open [API keys](https://app.galya.io/api-keys) from the sidebar. The page title is **API keys**. Publishable keys are marked for the browser. Secret keys are the ones you paste into the playground and use on a server.
-
-[Get started](https://app.galya.io/get-started) shows the same pair in the side rail, under **Copy your workspace keys**, while you are setting up. Account keys are on [Settings](https://app.galya.io/settings).
+If the header does not match the key's workspace, the API returns `403` with `workspace_mismatch`.

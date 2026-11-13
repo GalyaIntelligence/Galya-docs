@@ -1,36 +1,52 @@
 ---
 title: Introduction
-description: "Galya API overview: index a product catalog, link what people engage with, and query their taste with search, recommend, and rerank from your app or agent."
+description: "Galya API overview: send your catalog as items, record what shoppers do, and rank, search and recommend by taste with one natural-language commerce model."
 ---
 
-Galya keeps a catalog of things you can recommend, a record of who engaged with them, and a way to query that taste. You do this in a workspace. The [dashboard](https://app.galya.io) is where you watch the catalog and find your keys. The API is how your app writes and queries it.
+Galya ranks a catalog for each shopper by taste. You send it two things — your **items** and what each **user** does with them — and ask it to rank, search or recommend. One model, `galya-natural-language-commerce`, does the reading and the ranking. There is nothing to train, tune or choose.
 
 <Note>
-  Galya sets up each workspace as part of a [pilot](https://www.galya.io/pilot/). There is no self-serve sign-up or self-serve API key. To get access, email [hello@galya.io](mailto:hello@galya.io). Once your workspace is live, your team signs in to the dashboard and the keys below are already there.
+  Galya sets up each workspace as part of a [pilot](https://www.galya.io/pilot/). There is no self-serve sign-up. To get access, email [hello@galya.io](mailto:hello@galya.io). Once your workspace is live, your keys are on the [dashboard](https://app.galya.io/api-keys).
 </Note>
 
-The interactive examples in these docs send requests to the [development API](/development-api).
+The API is at `https://api.galya.io`. The interactive examples in these docs call it with the key you paste.
 
-## What you work with
+## Three resources
 
-| Module | What it is | Where you see it |
+| Resource | What it is | Main call |
 | --- | --- | --- |
-| Entities | People, products, brands, and other things you score | [People](https://app.galya.io/people) and [Catalog](https://app.galya.io/catalog) |
-| Contents | The text or media attached to an entity | Catalog, after you index |
-| Links | A record that one entity is about another | Built on [Get started](https://app.galya.io/get-started), then visible as taste on People |
-| Query | Search, recommend, and rerank | Get started, step “Query taste” |
-| Models | How a query scores the catalog | Chosen on the request; results show on Overview and Catalog |
-| Audience types | Groups of people with similar taste | [Audience types](https://app.galya.io/audience-types) |
-| Agentic search | Let an outside agent query under a policy you set | API |
-| Connectors | Bring a catalog in from a source you connect | Lands in Catalog |
+| [Item](/guides/items) | One thing you sell or show: a product, a video, a look. Its text, image and your metadata. | `POST /v1/item` |
+| [User](/guides/users) | One shopper: their interactions with items, their taste, and every ranking for them. | `POST /v1/user` |
+| [Schema](/guides/schemas) | The questions the model answers about each item: the built-in fashion schema, your own questions, or both. | `GET /v1/schemas` |
+
+`POST /v1/search`, `POST /v1/rerank` and `POST /v1/recommend` are shortcuts for the common ranking intents. [Agentic search](/guides/agentic-search) lets outside AI agents query your catalog under a policy you set.
+
+## How it works
+
+1. **Items are read once.** When you upsert an item, the model reads its image and text and answers every question in the schema with a probability per option. That answer is the item's [readout](/concepts/readouts). It is the index: there are no embeddings to manage.
+2. **Interactions are plain language.** Record what a shopper did with an item as a tag — `"liked"`, `"added to bag"`, `"watched 12s"`. Galya weights them and keeps the raw text.
+3. **Taste is computed at query time** from the readouts of the items a shopper interacted with, through whichever schema the call names. The same history works for any number of schemas.
+4. **Every ranked item says why.** Results carry `reasons`: the readout fields and options that lifted the item for this shopper.
 
 ## A first loop
 
-1. In your provisioned workspace, open [Get started](https://app.galya.io/get-started) and take the workspace secret from **Copy your workspace keys**.
-2. Index one catalog item and create a person. See [Quickstart](/quickstart).
-3. Link that person to the item, then search or recommend.
-4. Open [Catalog](https://app.galya.io/catalog) and [People](https://app.galya.io/people) to see what landed.
+<Steps>
+  <Step title="Get a key">
+    Copy the workspace secret (`galya_sk_...`) from [API keys](https://app.galya.io/api-keys). See [Authentication](/authentication).
+  </Step>
+  <Step title="Send a few items">
+    `POST /v1/item` with a title and an image each. See the [quickstart](/quickstart).
+  </Step>
+  <Step title="Record a shopper's interactions and rank">
+    `POST /v1/user` with `interactions` and `rank` in one call.
+  </Step>
+</Steps>
 
-<Card title="Dashboard map" icon="table" href="/dashboard">
-  Which sidebar page matches which API module.
-</Card>
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    From an empty workspace to a ranked list in four calls.
+  </Card>
+  <Card title="Readouts and taste" icon="list-check" href="/concepts/readouts">
+    What the model reads from each item, and how taste comes from it.
+  </Card>
+</CardGroup>

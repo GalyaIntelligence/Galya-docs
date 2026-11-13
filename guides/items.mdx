@@ -1,0 +1,121 @@
+---
+title: Items
+description: "Send your catalog to Galya with POST /v1/item: upsert products with text, image and metadata, wait for their readouts, filter with where, and delete."
+api: "POST /v1/item"
+---
+
+An item is one thing you sell or show: a product, a variant, a video, a look. Send its text and image and Galya's model reads it into a [readout](/concepts/readouts) for the call's schema. That readout is what ranking, search and filtering use.
+
+<ParamField body="schema" type="string | object" required>
+  A schema id (`galya-commerce-v3`, `sch_...`) or an inline [schema definition](/guides/schemas). The response's `schema_id` is the id it resolved to.
+</ParamField>
+
+<ParamField body="items" type="object[]" required>
+  1 to 100 items.
+
+  <Expandable title="item">
+    <ParamField body="id" type="string" required>
+      Your id. Letters, digits and `_ . : -`, up to 128 characters. Upserts are idempotent by id.
+    </ParamField>
+    <ParamField body="title" type="string">
+      Up to 500 characters.
+    </ParamField>
+    <ParamField body="text" type="string">
+      Description or listing text the model reads.
+    </ParamField>
+    <ParamField body="image_url" type="string">
+      Primary image the model reads (https or a data URI).
+    </ParamField>
+    <ParamField body="metadata" type="object">
+      Your fields, returned as-is and filterable with `metadata.<key>`. Set `product_id` to group variants of one product, so rankings don't fill up with them.
+    </ParamField>
+    <ParamField body="readout" type="object">
+      Supply a readout yourself and skip the model. See below.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<RequestExample>
+
+```bash
+curl https://api.galya.io/v1/item \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "schema": "galya-commerce-v3",
+    "items": [{
+      "id": "sku_wrap_dress",
+      "title": "Black wrap midi dress",
+      "text": "Wrap silhouette, crepe, midi length.",
+      "image_url": "https://cdn.example.com/wrap-dress.jpg",
+      "metadata": { "product_id": "1001", "price": 129, "vendor": "Acme" }
+    }]
+  }'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 202
+{
+  "schema_id": "galya-commerce-v3",
+  "items": [{ "id": "sku_wrap_dress", "status": "pending" }]
+}
+```
+
+</ResponseExample>
+
+## Readouts are asynchronous
+
+The call returns `202` with each item's status for the schema:
+
+| Status | Meaning |
+| --- | --- |
+| `pending` | Queued for the model. Usually ready within half a minute. |
+| `ready` | The readout is stored and current. The item ranks. |
+| `failed` | The model could not read it (`error` says why, e.g. `missing_content` when there is neither text nor image). Upsert it again to retry. |
+
+Track progress with `GET /v1/item?schema=galya-commerce-v3&status=pending`, or read one item with `GET /v1/item/{itemId}?schema=galya-commerce-v3`.
+
+Upserting an item whose `text` and `image_url` have not changed does not read it again. Omitted fields are kept, so you can update `metadata` alone.
+
+## One item, many schemas
+
+Upsert the same item with another schema and it gets a second readout; the first stays. `GET /v1/item/{itemId}` returns `readouts` keyed by schema id.
+
+## Filter the catalog
+
+`GET /v1/item` lists items, filtered by readout options and metadata:
+
+```bash
+curl -G https://api.galya.io/v1/item \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  --data-urlencode 'schema=galya-commerce-v3' \
+  --data-urlencode 'where=product_family = "Dress" AND color IN ("Black", "Navy") AND metadata.vendor = "Acme"' \
+  --data-urlencode 'include=readout'
+```
+
+`where` grammar, joined with `AND`:
+
+- `<field> = "<option>"` — the readout gives that option at least `min_p` (default `0.5`).
+- `<field> IN ("<a>", "<b>")` — any of them does.
+- `metadata.<key> = <value>` — exact match on your metadata.
+
+The same `where` narrows any [ranking](/guides/users#rank). Pages hold up to 200 items; pass `next_cursor` back as `cursor`.
+
+## Bring your own readout
+
+If you already have structured attributes, send them as `readout` and Galya stores them without calling the model. Each field takes a single option (`"Dress"`) or a probability map (`{"White": 0.9, "Beige": 0.1}`); your own field ids are fine.
+
+```json
+{
+  "schema": "sch_9b1f2e7c4a",
+  "items": [{ "id": "sku_77", "title": "Linen shirt", "readout": { "color": { "White": 0.9, "Beige": 0.1 }, "product_family": "Shirt" } }]
+}
+```
+
+## Update and delete
+
+- `PUT /v1/item/{itemId}` upserts one item with the same rules (handy for product webhooks). It returns `202` while the readout is pending and `200` when nothing changed.
+- `DELETE /v1/item/{itemId}` removes the item and its readouts. Interactions that reference it are kept but stop counting toward taste.

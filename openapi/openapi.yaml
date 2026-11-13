@@ -2,111 +2,90 @@ openapi: 3.1.0
 info:
   title: Galya API
   version: 0.1.0
-  description: 'Index a catalog, link taste, and query it.
+  description: 'Natural-language commerce API: index catalog items, record shopper interactions, and rank,
+    search and
+
+    recommend by taste.
 
 
-    Workspace data routes accept a workspace secret (`galya_sk_...`) or an account key
+    Authenticate with a workspace secret (`galya_sk_...`) in `X-API-Key` or `Authorization: Bearer`.
 
-    (`galya_ak_...`) plus `X-Galya-Workspace-Id`, via `X-API-Key` or `Authorization: Bearer`.
+    An account key (`galya_ak_...`) also works together with `X-Galya-Workspace-Id`.
+
+
+    **One model.** Every call runs on `galya-natural-language-commerce`. There is nothing to choose;
+
+    model upgrades ship behind the same API and `meta.model_version` reports which one answered.
+
+
+    **Item, User, Schema.** Put catalog data in with `/v1/item` (each item''s readout is its index) and
+    do
+
+    everything about a shopper with `POST /v1/user`: record interactions by item id and a plain-language
+
+    tag, read their taste, and search, rank or recommend. Every item and user call names a **schema**
+    (an
+
+    id, or an inline definition from your code that Galya stores by content hash); `/v1/schemas` lists
+    and
+
+    manages them. `POST /v1/search`, `POST /v1/rerank` and `POST /v1/recommend` are conveniences for the
+
+    common ranking intents, and agentic search exposes your catalog to outside agents.
 
     '
 servers:
-- url: https://dev.api.galya.io
-  description: Development API
+- url: https://api.galya.io
+  description: Production
 tags:
-- name: core
-  description: Entity index, read, and link operations
+- name: item
+  description: Catalog items and their taste readouts (the index)
+- name: user
+  description: Interactions, taste profiles, search and ranking for one shopper
+- name: schema
+  description: Taste schemas (immutable, content-addressed; unlimited per workspace)
 - name: connectors
   description: Native connector registry and workspace connections
 - name: agentic-search
   description: Expose the graph to outside agents under a workspace policy
 paths:
-  /v1/index:
+  /v1/item:
     post:
       tags:
-      - core
-      operationId: indexEntity
-      summary: Index one content (text, image, …) and write its vectors
-      description: "Contents and entities are separate records. A content is one indexed artifact\nand\
-        \ carries the vectors; an entity is the thing you recommend, score and traverse.\nMany contents\
-        \ link to one entity (a product with three photos and a description);\nthe entity's vector is\
-        \ composed from its contents at read time.\n\nBody shapes:\n- `content_id` (+ optional `entity_id`):\
-        \ write this content. `entity_id` names the\n  entity it represents and must already exist (`404\
-        \ entity_not_found` otherwise).\n  Without `entity_id` the content stays unattached: searchable,\
-        \ never a candidate.\n- `entity_id` alone (no `content_id`): the one-record shortcut. Upserts\
-        \ the entity\n  (`type`, `name`, `metadata`) and writes a same-id content linked to it. This is\
-        \ the\n  pre-split body shape, so existing callers keep working.\n- neither: an unattached content\
-        \ with a generated `cnt_…` id.\n\n`model_id` may be an encoder, or a predictor/decoder whose policy\
-        \ names an encoder.\nWhen `model_id` is omitted, the content is written into every active encoder\
-        \ the\nregistry would use for its domain. Omitted fields on an existing content are kept.\nUse\
-        \ `POST /v1/entity` to create entities on purpose, and\n`POST /v1/entity/{entityId}/contents`\
-        \ to attach contents indexed earlier.\n"
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/IndexEntityRequest'
-      responses:
-        '201':
-          description: Entity upserted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/IndexEntityResponse'
-        '400':
-          description: Invalid JSON or embedding
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorBody'
-        '401':
-          $ref: '#/components/responses/MissingOrInvalidApiKey'
-        '403':
-          $ref: '#/components/responses/WorkspaceMismatch'
-        '500':
-          $ref: '#/components/responses/InternalError'
-      x-codeSamples:
-      - lang: typescript
-        label: indexEntity
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.indexEntity({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    body: {\n      metadata: {\n\
-          \        readout: {\n          \"color\": {\n            \"Black\": 0.8,\n            \"Grey\"\
-          : 0.2,\n          },\n          \"product_family\": \"Dress\",\n          \"pattern\": [\n \
-          \           {\n              o: \"Solid\",\n              p: 0.9,\n            },\n        \
-          \    {\n              o: \"Stripe\",\n              p: 0.1,\n            },\n          ],\n\
-          \        },\n      },\n    },\n  });\n\n  console.log(result);\n}\n\nrun();"
-      x-mint:
-        metadata:
-          description: Index one content (text, image, ...) and write its vectors. Contents and entities
-            are separate records. A content is one indexed artifact and carries the...
-          noindex: true
-  /v1/entity:
-    post:
-      tags:
-      - core
-      operationId: upsertEntity
-      summary: Upsert an entity (identity only, no vectors)
-      description: 'Writes `entity_id`, `type`, `domain`, `name`, `metadata`. Nothing is embedded.
+      - item
+      operationId: upsertItems
+      summary: Upsert items; the model reads each one into a taste readout
+      description: 'The one way to put catalog data into Galya. Each item is one record (a product, a
+        video,
 
-        Index contents with `POST /v1/index` (`content_id` + `entity_id`) and they compose
+        a look) with its text, image and your metadata. There is no separate index call: an item''s
 
-        the entity''s vector at read time. `model_id` may be passed to imply `domain` from a
+        **readout** — a probability distribution over options for every field of the schema — *is*
 
-        domain-scoped model.
+        the index.
 
 
-        Compatibility: when the body also carries content fields (`content`, `embedding`,
+        Every call names a **`schema`**: a schema id (`galya-commerce-v3`, `sch_…`) or an inline
 
-        `source_url`, `image_url`, …) this behaves like the `/v1/index` shortcut and writes
+        definition, which is stored and answered with its content-addressed id (`schema_id`). Items
 
-        a same-id content too, exactly as before the split.
+        are read once per schema: one item can carry readouts for any number of schemas.
+
+
+        Reading an item takes the model ~4 s of GPU time per schema, so this call is
+
+        **asynchronous**: it returns `202` with each item''s `status` for that schema (`pending`
+
+        while queued, `ready` when the stored readout is current). Poll `GET /v1/item/{itemId}`
+
+        or the returned `job_id`. Items whose `text` and `image_url` are unchanged are not read
+
+        again for a schema they already have.
+
+
+        Supply `readout` yourself to skip the model; it is stored under the call''s schema (your own
+
+        field ids are fine). Upserts are idempotent by `id`; omitted fields are kept.
 
         '
       security:
@@ -119,263 +98,97 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/IndexEntityRequest'
+              $ref: '#/components/schemas/ItemUpsertRequest'
+            examples:
+              products:
+                summary: Two products, read with the built-in trained schema
+                value:
+                  schema: galya-commerce-v3
+                  items:
+                  - id: gid_8123
+                    title: Black wrap midi dress
+                    text: Wrap silhouette, crepe, midi length.
+                    image_url: https://cdn.shopify.com/s/files/dress.jpg
+                    metadata:
+                      product_id: '8123'
+                      price: 129
+                      vendor: Acme
+                  - id: gid_8124
+                    title: Leather ankle boot
+                    image_url: https://cdn.shopify.com/s/files/boot.jpg
+              inlineSchema:
+                summary: An inline schema from your code (stored, id returned)
+                value:
+                  schema:
+                    name: occasion-and-fit
+                    base: galya-commerce-v3
+                    questions:
+                    - id: occasion
+                      text: What occasion is this product for?
+                      options:
+                      - Work
+                      - Party
+                      - Everyday
+                    - id: fit
+                      text: How does it fit?
+                      options:
+                      - Slim
+                      - Regular
+                      - Relaxed
+                  items:
+                  - id: gid_8123
+                    title: Black wrap midi dress
+                    image_url: https://cdn.shopify.com/s/files/dress.jpg
+              supplied:
+                summary: Bring your own readout (no model call)
+                value:
+                  schema: sch_9b1f2e7c4a
+                  items:
+                  - id: sku_77
+                    title: Linen shirt
+                    readout:
+                      color:
+                        White: 0.9
+                        Beige: 0.1
+                      product_family: Shirt
       responses:
-        '201':
-          description: Entity upserted
+        '202':
+          description: Accepted; readouts are generated in the background
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IndexEntityResponse'
-        '400':
-          description: Invalid JSON or embedding
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorBody'
-        '401':
-          $ref: '#/components/responses/MissingOrInvalidApiKey'
-        '403':
-          $ref: '#/components/responses/WorkspaceMismatch'
-        '500':
-          $ref: '#/components/responses/InternalError'
-      x-codeSamples:
-      - lang: typescript
-        label: upsertEntity
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.upsertEntity({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    body: {\n      metadata: {\n\
-          \        readout: {\n          \"color\": {\n            \"Black\": 0.8,\n            \"Grey\"\
-          : 0.2,\n          },\n          \"product_family\": \"Dress\",\n          \"pattern\": [\n \
-          \           {\n              o: \"Solid\",\n              p: 0.9,\n            },\n        \
-          \    {\n              o: \"Stripe\",\n              p: 0.1,\n            },\n          ],\n\
-          \        },\n      },\n    },\n  });\n\n  console.log(result);\n}\n\nrun();"
-      x-mint:
-        metadata:
-          description: Upsert an entity (identity only, no vectors). Writes entityid, type, domain, name,
-            metadata. Nothing is embedded. Index contents with POST /v1/index...
-          noindex: true
-  /v1/entities/types:
-    get:
-      tags:
-      - core
-      operationId: listEntityTypes
-      summary: List entity types used in this workspace
-      description: 'Distinct types recorded when entities are created or their type changes
-
-        (`product`, `user`, and any later type). Backfilled from existing entities.
-
-        '
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      responses:
-        '200':
-          description: Entity types for the authenticated workspace
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EntityTypesResponse'
-        '401':
-          $ref: '#/components/responses/MissingOrInvalidApiKey'
-        '403':
-          $ref: '#/components/responses/WorkspaceMismatch'
-        '500':
-          $ref: '#/components/responses/InternalError'
-      x-codeSamples:
-      - lang: typescript
-        label: listEntityTypes
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.listEntityTypes({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  });\n\n  console.log(result);\n}\n\n\
-          run();"
-      x-mint:
-        metadata:
-          description: List entity types used in this workspace. Distinct types recorded when entities
-            are created or their type changes (product, user, and any later type)....
-          noindex: true
-  /v1/entity/{entityId}:
-    get:
-      tags:
-      - core
-      operationId: getEntity
-      summary: Get an entity by public id
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      - $ref: '#/components/parameters/EntityIdPath'
-      responses:
-        '200':
-          description: Entity
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EntitySingleResponse'
-        '401':
-          $ref: '#/components/responses/MissingOrInvalidApiKey'
-        '403':
-          $ref: '#/components/responses/WorkspaceMismatch'
-        '404':
-          $ref: '#/components/responses/NotFound'
-      x-codeSamples:
-      - lang: typescript
-        label: getEntity
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.getEntity({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    entityId: \"<id>\",\n  });\n\
-          \n  console.log(result);\n}\n\nrun();"
-      x-mint:
-        metadata:
-          description: Get an entity by public id. GET /v1/entity/{entityId} in the Galya API reference.
-          noindex: true
-  /v1/entity/{entityId}/contents:
-    get:
-      tags:
-      - core
-      operationId: listEntityContents
-      summary: Contents linked to an entity
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      - $ref: '#/components/parameters/EntityIdPath'
-      responses:
-        '200':
-          description: Contents that represent this entity
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EntityContentsResponse'
-        '401':
-          $ref: '#/components/responses/MissingOrInvalidApiKey'
-        '403':
-          $ref: '#/components/responses/WorkspaceMismatch'
-        '404':
-          $ref: '#/components/responses/NotFound'
-      x-codeSamples:
-      - lang: typescript
-        label: listEntityContents
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.listEntityContents({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    entityId: \"<id>\",\n  });\n\
-          \n  console.log(result);\n}\n\nrun();"
-      x-mint:
-        metadata:
-          description: Contents linked to an entity. GET /v1/entity/{entityId}/contents in the Galya API
-            reference.
-          noindex: true
-    post:
-      tags:
-      - core
-      operationId: attachContents
-      summary: Attach existing contents to an entity
-      description: 'Links contents indexed earlier (or attached to another entity) to this entity and
-
-        retags their stored vectors in place, so the entity''s composed vector picks them up
-
-        without re-encoding. Optional `role` and `weight` apply to every content in the call.
-
-        '
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      - $ref: '#/components/parameters/EntityIdPath'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AttachContentsRequest'
-      responses:
-        '200':
-          description: Contents attached
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AttachContentsResponse'
+                $ref: '#/components/schemas/ItemUpsertResponse'
+              example:
+                schema_id: galya-commerce-v3
+                job_id: job_01JD4X
+                items:
+                - id: gid_8123
+                  status: pending
+                - id: gid_8124
+                  status: ready
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/MissingOrInvalidApiKey'
         '403':
           $ref: '#/components/responses/WorkspaceMismatch'
-        '404':
-          description: Entity, or every named content, not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorBody'
-      x-codeSamples:
-      - lang: typescript
-        label: attachContents
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.attachContents({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    entityId: \"<id>\",\n    body:\
-          \ {},\n  });\n\n  console.log(result);\n}\n\nrun();"
       x-mint:
         metadata:
-          description: Attach existing contents to an entity. Links contents indexed earlier (or attached
-            to another entity) to this entity and retags their stored vectors in...
+          description: Upsert items; the model reads each one into a taste readout. The one way to put
+            catalog data into Galya. Each item is one record (a product, a video, a...
           noindex: true
-  /v1/entity/{entityId}/contents/{contentId}:
-    delete:
+    get:
       tags:
-      - core
-      operationId: detachContent
-      summary: Detach a content from an entity
-      description: The content stays indexed but unattached; its vectors are retagged with no owner.
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      - $ref: '#/components/parameters/EntityIdPath'
-      - $ref: '#/components/parameters/ContentIdPath'
-      responses:
-        '200':
-          description: Content detached
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DetachContentResponse'
-        '401':
-          $ref: '#/components/responses/MissingOrInvalidApiKey'
-        '403':
-          $ref: '#/components/responses/WorkspaceMismatch'
-        '404':
-          $ref: '#/components/responses/NotFound'
-      x-codeSamples:
-      - lang: typescript
-        label: detachContent
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.detachContent({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    entityId: \"<id>\",\n    contentId:\
-          \ \"<id>\",\n  });\n\n  console.log(result);\n}\n\nrun();"
-      x-mint:
-        metadata:
-          description: Detach a content from an entity. The content stays indexed but unattached; its
-            vectors are retagged with no owner. DELETE...
-          noindex: true
-  /v1/entity/{parentId}/link:
-    post:
-      tags:
-      - core
-      operationId: linkEntity
-      summary: Link a child entity to a parent and refresh user state
-      description: 'Creates the parent user entity if missing. Requires the child entity to exist.
+      - item
+      operationId: listItems
+      summary: List items, optionally filtered by readout attributes
+      description: 'Filter the catalog by readout attributes and metadata. `where` matches readout options
 
-        Does not re-encode the child. Recomposes the parent''s state vector from its
+        (an item matches `color = "Black"` when its readout gives `Black` at least `min_p`) and
 
-        linked children using the latent model (`model_id`, a decoder). When `model_id`
+        metadata (`metadata.vendor = "Acme"`). Grammar:
 
-        is omitted, the workspace compose default is used, falling back to weighted-mean-v1.
+        `<field> = "<option>"`, `<field> IN ("<a>", "<b>")`, `metadata.<key> = <value>`, joined by `AND`.
 
         '
       security:
@@ -383,132 +196,501 @@ paths:
       - WorkspaceBearer: []
       parameters:
       - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      - name: parentId
-        in: path
-        required: true
+      - name: schema
+        in: query
+        description: Schema id whose readouts `where`, `status` and `include=readout` apply to. Required
+          when any of them is used.
         schema:
           type: string
-        description: Parent entity public id (often a user id)
+          example: galya-commerce-v3
+      - name: where
+        in: query
+        schema:
+          type: string
+        example: product_family = "Dress" AND color IN ("Black", "Navy")
+      - name: min_p
+        in: query
+        description: Minimum option probability for a readout match.
+        schema:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.5
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/ItemStatus'
+      - name: include
+        in: query
+        description: Comma-separated. `readout` adds each item's readout.
+        schema:
+          type: string
+          example: readout
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: cursor
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: A page of items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/MissingOrInvalidApiKey'
+      x-mint:
+        metadata:
+          description: List items, optionally filtered by readout attributes. Filter the catalog by readout
+            attributes and metadata. where matches readout options (an item...
+          noindex: true
+  /v1/item/{itemId}:
+    parameters:
+    - $ref: '#/components/parameters/ItemIdPath'
+    - $ref: '#/components/parameters/OptionalWorkspaceHeader'
+    get:
+      tags:
+      - item
+      operationId: getItem
+      summary: Read one item and its readouts
+      description: '`readouts` holds one entry per schema the item has been read with; `schema` narrows
+        it to one.'
+      security:
+      - WorkspaceApiKey: []
+      - WorkspaceBearer: []
+      parameters:
+      - name: schema
+        in: query
+        schema:
+          type: string
+          example: galya-commerce-v3
+      responses:
+        '200':
+          description: The item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+        '401':
+          $ref: '#/components/responses/MissingOrInvalidApiKey'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      x-mint:
+        metadata:
+          description: Read one item and its readouts. readouts holds one entry per schema the item has
+            been read with; schema narrows it to one. GET /v1/item/{itemId} in the...
+          noindex: true
+    put:
+      tags:
+      - item
+      operationId: putItem
+      summary: Upsert one item (same semantics as POST /v1/item)
+      description: Convenient for product webhooks. Returns `202` while the readout is pending, `200`
+        when unchanged.
+      security:
+      - WorkspaceApiKey: []
+      - WorkspaceBearer: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LinkEntityRequest'
+              $ref: '#/components/schemas/PutItemRequest'
       responses:
         '200':
-          description: Link recorded and state composition attempted
+          description: Stored; readout already current
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LinkEntityResponse'
+                $ref: '#/components/schemas/Item'
+        '202':
+          description: Stored; readout pending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/MissingOrInvalidApiKey'
+      x-mint:
+        metadata:
+          description: Upsert one item (same semantics as POST /v1/item). Convenient for product webhooks.
+            Returns 202 while the readout is pending, 200 when unchanged. PUT...
+          noindex: true
+    delete:
+      tags:
+      - item
+      operationId: deleteItem
+      summary: Delete an item and its readout
+      description: Interactions that reference the item are kept but no longer count toward taste.
+      security:
+      - WorkspaceApiKey: []
+      - WorkspaceBearer: []
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/MissingOrInvalidApiKey'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      x-mint:
+        metadata:
+          description: Delete an item and its readout. Interactions that reference the item are kept but
+            no longer count toward taste. DELETE /v1/item/{itemId} in the Galya API...
+          noindex: true
+  /v1/user:
+    post:
+      tags:
+      - user
+      operationId: userCall
+      summary: Record interactions, read taste, and rank — in one call
+      description: "Everything about a shopper goes through this call. **`schema`** is required (an id\
+        \ or an\ninline definition, as on `POST /v1/item`); everything else is optional:\n\n- **`interactions`**\
+        \ link items into the user's history. Each has an `item_id` and a\n  natural-language `tag` (\"\
+        added to bag\", \"liked\", \"watched 12s\", \"skipped\", \"bought\").\n  Galya maps the tag to\
+        \ a known signal (`read_as` in the response) for weighting and\n  keeps the raw text for the model.\
+        \ Interactions are idempotent by `id`: a retried call\n  does not double count. An interaction\
+        \ with an unknown `item_id` is not stored (status\n  `item_unknown`): upsert the item first. One\
+        \ with an item whose readout is still pending is\n  stored (`item_pending`) and counts once the\
+        \ readout exists. Unknown users are created on\n  first call. Tags read as `view` (no dwell),\
+        \ `impression` or `other` are stored but do not\n  move taste yet.\n- **`rank`** ranks items for\
+        \ this user by taste. With `item_ids` it reranks exactly those\n  (≤ 1000); with `query` it searches\
+        \ (\"black boots for work\") and ranks the matches; with\n  neither, it recommends from the whole\
+        \ catalog. `where` narrows any of them.\n  Every ranked item carries `reasons`: the readout fields\
+        \ and options that lifted it.\n- **`include: [taste]`** returns the user's taste profile.\n\n\
+        Interactions do not depend on a schema: they are stored once, and taste is computed per\nschema\
+        \ at query time from the readouts of the interacted items. So the same history can be\nread through\
+        \ any number of schemas. Items with no readout for the call's schema yet are\nqueued for one and\
+        \ listed in `not_ranked` (`pending`). The model's own taste correction\ncovers the trained `galya-commerce-v3`\
+        \ fields; custom question fields (`q:<id>`) rank\nthrough the pooled taste.\n\nInteractions recorded\
+        \ in a call are applied before that call's ranking. A shopper with no\ninteractions gets `score:\
+        \ 0` for every item; results then keep the order of `item_ids`\n(or catalog order), so callers\
+        \ can always render them.\n\nTaste is looked up from the model at query time and cached per interaction\
+        \ history; if the\nmodel is unavailable the pooled taste is used and `meta.state_source` says\
+        \ so.\n"
+      security:
+      - WorkspaceApiKey: []
+      - WorkspaceBearer: []
+      parameters:
+      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+            examples:
+              track:
+                summary: Pixel — record interactions only
+                value:
+                  user_id: shop_client_9f2c
+                  schema: galya-commerce-v3
+                  interactions:
+                  - id: evt_1
+                    item_id: gid_8123
+                    tag: viewed
+                    dwell_ms: 12000
+                    context:
+                      surface: collection
+                      position:
+                        y: 0.2
+                        x: 0.5
+                        area: 0.08
+                  - id: evt_2
+                    item_id: gid_8123
+                    tag: added to bag
+              rerank:
+                summary: Rerank a collection page
+                value:
+                  user_id: shop_client_9f2c
+                  schema: galya-commerce-v3
+                  rank:
+                    item_ids:
+                    - gid_8123
+                    - gid_8124
+                    - gid_8125
+                    limit: 3
+              recommend:
+                summary: Recommend from the catalog through a custom schema, with taste
+                value:
+                  user_id: shop_client_9f2c
+                  schema: sch_9b1f2e7c4a
+                  rank:
+                    limit: 8
+                    where: product_family = "Dress"
+                  include:
+                  - taste
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                user_id: shop_client_9f2c
+                schema_id: galya-commerce-v3
+                interactions:
+                - id: evt_2
+                  item_id: gid_8123
+                  tag: added to bag
+                  read_as: add_to_bag
+                  status: recorded
+                ranked:
+                - item_id: gid_8125
+                  score: 0.42
+                  reasons:
+                  - field: color
+                    option: Black
+                    lift: 0.31
+                  - field: silhouette
+                    option: Wrap
+                    lift: 0.11
+                - item_id: gid_8124
+                  score: 0.05
+                  reasons: []
+                meta:
+                  model_version: galya-natural-language-commerce@2026-10
+                  state_source: model
+                  latency_ms: 38
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/MissingOrInvalidApiKey'
         '403':
           $ref: '#/components/responses/WorkspaceMismatch'
-        '404':
-          description: Child entity not found
+      x-mint:
+        metadata:
+          description: Record interactions, read taste, and rank — in one call. Everything about a shopper
+            goes through this call. schema is required (an id or an inline...
+          noindex: true
+  /v1/user/{userId}:
+    parameters:
+    - $ref: '#/components/parameters/UserIdPath'
+    - $ref: '#/components/parameters/OptionalWorkspaceHeader'
+    get:
+      tags:
+      - user
+      operationId: getUser
+      summary: Read a user's taste profile through a schema
+      security:
+      - WorkspaceApiKey: []
+      - WorkspaceBearer: []
+      parameters:
+      - name: schema
+        in: query
+        required: true
+        description: Schema id the taste is expressed in.
+        schema:
+          type: string
+          example: galya-commerce-v3
+      - name: include
+        in: query
+        description: Comma-separated. `interactions` adds the most recent interactions.
+        schema:
+          type: string
+          example: interactions
+      responses:
+        '200':
+          description: The user's taste
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorBody'
-      x-codeSamples:
-      - lang: typescript
-        label: linkEntity
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.linkEntity({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    parentId: \"<id>\",\n    body:\
-          \ {\n      metadata: {\n        dwell_ms: 8200,\n        duration_s: 21,\n        at: 1793340000000,\n\
-          \      },\n    },\n  });\n\n  console.log(result);\n}\n\nrun();"
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          $ref: '#/components/responses/MissingOrInvalidApiKey'
+        '404':
+          $ref: '#/components/responses/NotFound'
       x-mint:
         metadata:
-          description: Link a child entity to a parent and refresh user state. Creates the parent user
-            entity if missing. Requires the child entity to exist. Does not re-encode...
+          description: Read a user's taste profile through a schema. GET /v1/user/{userId} in the Galya
+            API reference.
           noindex: true
-  /v1/entity/{parentId}/link/{childId}:
     delete:
       tags:
-      - core
-      operationId: unlinkEntity
-      summary: Remove a child link from a parent and refresh user state
-      description: 'Deletes the parent→child link. With `relation`, only that relation is removed;
+      - user
+      operationId: deleteUser
+      summary: Erase a user, their interactions and cached taste
+      description: For privacy requests (e.g. Shopify `customers/redact`). Irreversible.
+      security:
+      - WorkspaceApiKey: []
+      - WorkspaceBearer: []
+      responses:
+        '204':
+          description: Erased
+        '401':
+          $ref: '#/components/responses/MissingOrInvalidApiKey'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      x-mint:
+        metadata:
+          description: Erase a user, their interactions and cached taste. For privacy requests (e.g. Shopify
+            customers/redact). Irreversible. DELETE /v1/user/{userId} in the...
+          noindex: true
+  /v1/schemas:
+    parameters:
+    - $ref: '#/components/parameters/OptionalWorkspaceHeader'
+    post:
+      tags:
+      - schema
+      operationId: createSchema
+      summary: Store a schema and get its id
+      description: 'Schemas are defined in your code and are **immutable and content-addressed**: the
+        id is a
 
-        otherwise every relation between the two entities is removed. The parent''s state
+        hash of `base` + `questions`, so the same definition always gets the same id and posting it
 
-        vector is then recomposed from its remaining links using the latent model
+        again returns `200` with that id. Changing a definition makes a new schema; the old one and
 
-        (`model_id`, a decoder; defaults as for `linkEntity`). When no links remain, the
+        its readouts stay usable. There is no limit on how many a workspace has.
 
-        parent''s state vectors are deleted from every vector index and `state.status` is
 
-        `cleared`. Neither entity is deleted.
+        You rarely need this call: `/v1/item` and `/v1/user` accept the definition inline and store
+
+        it the same way. Use it to register schemas ahead of time (e.g. at deploy).
 
         '
       security:
       - WorkspaceApiKey: []
       - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      - name: parentId
-        in: path
+      requestBody:
         required: true
-        schema:
-          type: string
-        description: Parent entity public id (often a user id)
-      - name: childId
-        in: path
-        required: true
-        schema:
-          type: string
-        description: Linked child entity public id
-      - name: relation
-        in: query
-        required: false
-        schema:
-          type: string
-        description: Only remove this relation. Omit to remove all relations.
-      - name: model_id
-        in: query
-        required: false
-        schema:
-          type: string
-        description: Decoder used to recompose the parent state
-      - name: encoder_model_id
-        in: query
-        required: false
-        schema:
-          type: string
-        description: Encoder index to write the recomposed state into
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchemaDefinition'
+            example:
+              name: occasion-and-fit
+              base: galya-commerce-v3
+              questions:
+              - id: occasion
+                text: What occasion is this product for?
+                options:
+                - Work
+                - Party
+                - Everyday
+              - id: fit
+                text: How does it fit?
+                options:
+                - Slim
+                - Regular
+                - Relaxed
       responses:
         '200':
-          description: Link removed and state recomposed (or cleared)
+          description: Already stored (same definition)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UnlinkEntityResponse'
+                $ref: '#/components/schemas/Schema'
+        '201':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schema'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/MissingOrInvalidApiKey'
-        '403':
-          $ref: '#/components/responses/WorkspaceMismatch'
-        '404':
-          description: Parent, child, latent model, or link not found
+      x-mint:
+        metadata:
+          description: 'Store a schema and get its id. Schemas are defined in your code and are immutable
+            and content-addressed: the id is a hash of base + questions, so the same...'
+          noindex: true
+    get:
+      tags:
+      - schema
+      operationId: listSchemas
+      summary: List the workspace's schemas and the built-in ones
+      security:
+      - WorkspaceApiKey: []
+      - WorkspaceBearer: []
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: cursor
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: A page of schemas
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorBody'
-      x-codeSamples:
-      - lang: typescript
-        label: unlinkEntity
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.unlinkEntity({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    parentId: \"<id>\",\n    childId:\
-          \ \"<id>\",\n  });\n\n  console.log(result);\n}\n\nrun();"
+                $ref: '#/components/schemas/SchemaPage'
+        '401':
+          $ref: '#/components/responses/MissingOrInvalidApiKey'
       x-mint:
         metadata:
-          description: Remove a child link from a parent and refresh user state. Deletes the parent→child
-            link. With relation, only that relation is removed; otherwise every...
+          description: List the workspace's schemas and the built-in ones. GET /v1/schemas in the Galya
+            API reference.
+          noindex: true
+  /v1/schemas/{schemaId}:
+    parameters:
+    - $ref: '#/components/parameters/SchemaIdPath'
+    - $ref: '#/components/parameters/OptionalWorkspaceHeader'
+    get:
+      tags:
+      - schema
+      operationId: getSchema
+      summary: Read a schema, including how many items have readouts for it
+      security:
+      - WorkspaceApiKey: []
+      - WorkspaceBearer: []
+      responses:
+        '200':
+          description: The schema
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schema'
+        '401':
+          $ref: '#/components/responses/MissingOrInvalidApiKey'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      x-mint:
+        metadata:
+          description: Read a schema, including how many items have readouts for it. GET /v1/schemas/{schemaId}
+            in the Galya API reference.
+          noindex: true
+    delete:
+      tags:
+      - schema
+      operationId: deleteSchema
+      summary: Delete a schema and every readout made with it
+      description: Built-in schemas cannot be deleted (`400`). Interactions are untouched.
+      security:
+      - WorkspaceApiKey: []
+      - WorkspaceBearer: []
+      responses:
+        '204':
+          description: Deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/MissingOrInvalidApiKey'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      x-mint:
+        metadata:
+          description: Delete a schema and every readout made with it. Built-in schemas cannot be deleted
+            (400). Interactions are untouched. DELETE /v1/schemas/{schemaId} in the...
           noindex: true
   /v1/connectors/registry:
     get:
@@ -531,12 +713,6 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/ConnectorDefinition'
-      x-codeSamples:
-      - lang: typescript
-        label: listConnectorRegistry
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.connectors.listConnectorRegistry();\n\
-          \n  console.log(result);\n}\n\nrun();"
       x-mint:
         metadata:
           description: List native connector definitions. GET /v1/connectors/registry in the Galya API
@@ -560,12 +736,6 @@ paths:
           description: Connector definition
         '404':
           description: Not found
-      x-codeSamples:
-      - lang: typescript
-        label: getConnectorRegistryEntry
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  await galya.connectors.getConnectorRegistryEntry({\n    publicId:\
-          \ \"<id>\",\n  });\n\n\n}\n\nrun();"
       x-mint:
         metadata:
           description: Get one connector definition. GET /v1/connectors/registry/{publicId} in the Galya
@@ -582,12 +752,6 @@ paths:
       responses:
         '200':
           description: Connected connectors
-      x-codeSamples:
-      - lang: typescript
-        label: listConnectors
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya({\n\
-          \  workspaceApiKey: process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n});\n\nasync function\
-          \ run() {\n  await galya.connectors.listConnectors();\n\n\n}\n\nrun();"
       x-mint:
         metadata:
           description: List workspace connector instances. GET /v1/connectors in the Galya API reference.
@@ -602,12 +766,6 @@ paths:
       responses:
         '201':
           description: Connector instance created
-      x-codeSamples:
-      - lang: typescript
-        label: createConnector
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya({\n\
-          \  workspaceApiKey: process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n});\n\nasync function\
-          \ run() {\n  await galya.connectors.createConnector();\n\n\n}\n\nrun();"
       x-mint:
         metadata:
           description: Connect a native integration. POST /v1/connectors in the Galya API reference.
@@ -630,13 +788,6 @@ paths:
       responses:
         '200':
           description: Connector instance
-      x-codeSamples:
-      - lang: typescript
-        label: getConnector
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya({\n\
-          \  workspaceApiKey: process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n});\n\nasync function\
-          \ run() {\n  await galya.connectors.getConnector({\n    connectorId: \"45bcd83e-f01d-4895-992a-463538114f8d\"\
-          ,\n  });\n\n\n}\n\nrun();"
       x-mint:
         metadata:
           description: Get workspace connector instance. GET /v1/connectors/{connectorId} in the Galya
@@ -659,13 +810,6 @@ paths:
       responses:
         '200':
           description: Updated
-      x-codeSamples:
-      - lang: typescript
-        label: updateConnector
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya({\n\
-          \  workspaceApiKey: process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n});\n\nasync function\
-          \ run() {\n  await galya.connectors.updateConnector({\n    connectorId: \"5cd2fc9f-09d5-4f4c-84cf-d6596cb3048a\"\
-          ,\n  });\n\n\n}\n\nrun();"
       x-mint:
         metadata:
           description: Update connector instance. PATCH /v1/connectors/{connectorId} in the Galya API
@@ -688,13 +832,6 @@ paths:
       responses:
         '200':
           description: Deleted
-      x-codeSamples:
-      - lang: typescript
-        label: deleteConnector
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya({\n\
-          \  workspaceApiKey: process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n});\n\nasync function\
-          \ run() {\n  await galya.connectors.deleteConnector({\n    connectorId: \"02cc6343-a380-4737-8b94-f5d3c8842ff2\"\
-          ,\n  });\n\n\n}\n\nrun();"
       x-mint:
         metadata:
           description: Remove connector instance. DELETE /v1/connectors/{connectorId} in the Galya API
@@ -718,13 +855,6 @@ paths:
       responses:
         '200':
           description: Test result
-      x-codeSamples:
-      - lang: typescript
-        label: testConnector
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya({\n\
-          \  workspaceApiKey: process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n});\n\nasync function\
-          \ run() {\n  await galya.connectors.testConnector({\n    connectorId: \"ac5d92b2-41b1-4611-857c-6d6186192746\"\
-          ,\n  });\n\n\n}\n\nrun();"
       x-mint:
         metadata:
           description: Test connector worker connection. POST /v1/connectors/{connectorId}/test in the
@@ -748,13 +878,6 @@ paths:
       responses:
         '202':
           description: Sync job enqueued
-      x-codeSamples:
-      - lang: typescript
-        label: syncConnector
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya({\n\
-          \  workspaceApiKey: process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n});\n\nasync function\
-          \ run() {\n  await galya.connectors.syncConnector({\n    connectorId: \"e7eab81a-a0a5-447f-af70-24de0e9d879a\"\
-          ,\n  });\n\n\n}\n\nrun();"
       x-mint:
         metadata:
           description: Run connector sync job. POST /v1/connectors/{connectorId}/sync in the Galya API
@@ -771,12 +894,6 @@ paths:
       responses:
         '201':
           description: Request submitted
-      x-codeSamples:
-      - lang: typescript
-        label: submitConnectorRequest
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya({\n\
-          \  workspaceApiKey: process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n});\n\nasync function\
-          \ run() {\n  await galya.connectors.submitConnectorRequest();\n\n\n}\n\nrun();"
       x-mint:
         metadata:
           description: Request a new native connector. POST /v1/connectors/requests in the Galya API reference.
@@ -802,13 +919,6 @@ paths:
                 properties:
                   config:
                     $ref: '#/components/schemas/AgenticSearchConfig'
-      x-codeSamples:
-      - lang: typescript
-        label: getAgenticSearchConfig
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.agenticSearch.getAgenticSearchConfig({\n\
-          \    workspaceApiKey: process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  });\n\n  console.log(result);\n\
-          }\n\nrun();"
       x-mint:
         metadata:
           description: Read the agentic search policy. GET /v1/agentic-search/config in the Galya API
@@ -842,13 +952,6 @@ paths:
                     $ref: '#/components/schemas/AgenticSearchConfig'
         '400':
           $ref: '#/components/responses/BadRequest'
-      x-codeSamples:
-      - lang: typescript
-        label: updateAgenticSearchConfig
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.agenticSearch.updateAgenticSearchConfig({\n\
-          \    workspaceApiKey: process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {});\n\n  console.log(result);\n\
-          }\n\nrun();"
       x-mint:
         metadata:
           description: Update the agentic search policy. PUT /v1/agentic-search/config in the Galya API
@@ -877,13 +980,6 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/AgentKey'
-      x-codeSamples:
-      - lang: typescript
-        label: listAgentKeys
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.agenticSearch.listAgentKeys({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  });\n\n  console.log(result);\n}\n\n\
-          run();"
       x-mint:
         metadata:
           description: List agent keys. GET /v1/agentic-search/keys in the Galya API reference.
@@ -921,13 +1017,6 @@ paths:
                   secret:
                     type: string
                     description: Shown once; starts with `galya_ag_`
-      x-codeSamples:
-      - lang: typescript
-        label: createAgentKey
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.agenticSearch.createAgentKey({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  });\n\n  console.log(result);\n}\n\n\
-          run();"
       x-mint:
         metadata:
           description: Create an agent key. Returns the galyaag... secret exactly once. POST /v1/agentic-search/keys
@@ -963,13 +1052,6 @@ paths:
                     $ref: '#/components/schemas/AgentKey'
         '404':
           $ref: '#/components/responses/NotFound'
-      x-codeSamples:
-      - lang: typescript
-        label: revokeAgentKey
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.agenticSearch.revokeAgentKey({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    keyId: \"<id>\",\n  });\n\n\
-          \  console.log(result);\n}\n\nrun();"
       x-mint:
         metadata:
           description: Revoke an agent key. DELETE /v1/agentic-search/keys/{keyId} in the Galya API reference.
@@ -1006,12 +1088,6 @@ paths:
                 $ref: '#/components/schemas/AgenticSearchManifest'
         '404':
           $ref: '#/components/responses/NotFound'
-      x-codeSamples:
-      - lang: typescript
-        label: getAgenticSearchManifest
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.agenticSearch.getAgenticSearchManifest();\n\
-          \n  console.log(result);\n}\n\nrun();"
       x-mint:
         metadata:
           description: What agents can do here. Capabilities, limits, price, and an MCP-style tool schema.
@@ -1064,7 +1140,7 @@ paths:
               $ref: '#/components/schemas/AgenticSearchRequest'
       responses:
         '200':
-          description: Search results, scores, graph, or entity
+          description: The tool's result (items, scores or catalog facts)
           content:
             application/json:
               schema:
@@ -1104,12 +1180,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
-      x-codeSamples:
-      - lang: typescript
-        label: agenticSearch
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.agenticSearch.agenticSearch({\n    body:\
-          \ {\n      op: \"rerank\",\n    },\n  });\n\n  console.log(result);\n}\n\nrun();"
       x-mint:
         metadata:
           description: 'Search the graph as an agent. The only endpoint agent keys may call and the only
@@ -1117,28 +1187,22 @@ paths:
           noindex: true
   /v1/search:
     post:
+      x-galya-convenience-for: POST /v1/user with rank.query
       tags:
-      - core
+      - user
       operationId: searchWorkspace
-      summary: Search indexed content semantically or retrieve nearest items for a user
-      description: 'With `query` and no `model_id`, search is hybrid: BM25 over each entity''s
+      summary: Search the catalog by intent, ranked by taste
+      description: 'Convenience for `POST /v1/user` with `rank.query`, without interactions. Items are
 
-        name, text and short metadata strings, plus nearest neighbors in the text
+        retrieved by keyword match (case-insensitive, per term) on their title, text and metadata;
 
-        and image-text encoder spaces, fused by weighted reciprocal rank
+        items matching more of the query''s terms come first, and the user''s taste (when `user_id` is
 
-        (`explain.retrieval: hybrid_rrf`). `explain.legs` reports candidates and
+        given) orders items of equal match strength. Matches without a readout yet are still
 
-        any error per leg; one failing leg degrades results instead of failing the
+        returned, unscored, after the scored ones of the same strength. Same response shape as the
 
-        call. Keyword hits that match only some query terms are kept only when the
-
-        text encoder also places them near the query (`explain.legs.bm25.dropped`
-
-        counts the rest); hits with every term rank first. The keyword index is kept current on index
-        calls and rebuilt with a
-
-        `text_index` job. With `model_id`, only that encoder is searched.
+        `ranked` part of `/v1/user`. To rank by taste alone (no query), use `POST /v1/user` with `rank`.
 
         '
       security:
@@ -1152,40 +1216,51 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SearchRequest'
+            example:
+              schema: galya-commerce-v3
+              query: black boots for work
+              user_id: shop_client_9f2c
+              limit: 12
       responses:
         '200':
-          description: Ranked search results with retrieval explanation
+          description: Matching items, ranked
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
+                $ref: '#/components/schemas/SearchResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '503':
-          description: Every retrieval leg failed (keyword index and both encoders)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorBody'
-      x-codeSamples:
-      - lang: typescript
-        label: searchWorkspace
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.searchWorkspace({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    body: {\n      user_id: \"\
-          <id>\",\n      limit: 20,\n    },\n  });\n\n  console.log(result);\n}\n\nrun();"
+        '401':
+          $ref: '#/components/responses/MissingOrInvalidApiKey'
       x-mint:
         metadata:
-          description: 'Search indexed content semantically or retrieve nearest items for a user. With
-            query and no modelid, search is hybrid: BM25 over each entity''s name, text...'
+          description: Search the catalog by intent, ranked by taste. Convenience for POST /v1/user with
+            rank.query, without interactions. Items are retrieved by keyword match...
           noindex: true
   /v1/recommend:
     post:
+      x-galya-convenience-for: POST /v1/user with rank (no item_ids)
       tags:
-      - core
+      - user
       operationId: recommendForUser
-      summary: Recommend indexed entities for a user
+      summary: Recommend from the whole catalog for a user, on the Galya model
+      description: 'Convenience for `POST /v1/user` with `rank` and no `item_ids`: the top `limit` catalog
+        items for
+
+        this shopper''s taste. Every item with a readout is a candidate (no retrieval step); near-duplicates
+
+        of items the shopper just interacted with are pushed down. Each result carries `score`,
+
+        `contributions` (the readout fields that drove it) and a `reason`. `meta.state_source` says whether
+
+        the taste came from cache or was computed for this call. Typical p95 is under 100 ms from a
+
+        server in the same region with a kept-alive connection; `Server-Timing: worker;dur=…` reports
+        the
+
+        time spent in Galya.
+
+        '
       security:
       - WorkspaceApiKey: []
       - WorkspaceBearer: []
@@ -1207,41 +1282,43 @@ paths:
                 additionalProperties: true
         '400':
           $ref: '#/components/responses/BadRequest'
-      x-codeSamples:
-      - lang: typescript
-        label: recommendForUser
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.recommendForUser({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    body: {\n      user_id: \"\
-          <id>\",\n    },\n  });\n\n  console.log(result);\n}\n\nrun();"
       x-mint:
         metadata:
-          description: Recommend indexed entities for a user. POST /v1/recommend in the Galya API reference.
+          description: 'Recommend from the whole catalog for a user, on the Galya model. Convenience for
+            POST /v1/user with rank and no itemids: the top limit catalog items for...'
           noindex: true
   /v1/rerank:
     post:
+      x-galya-convenience-for: POST /v1/user with rank.item_ids
       tags:
-      - core
+      - user
       operationId: rerankForUser
-      summary: Rerank supplied candidate entity ids for a user
-      description: "Vector models (`cosine-rank-v1`, ...) rank the candidates against the user's state\
-        \ vector.\n\n**Readout-state models** (`hm-user-state-v1`: the H&M user-state model on the System\
-        \ 1\nserver, EC2 us-east-1) use no vectors:\n\n1. *Signals* are the user's links (`POST /v1/entity/{user}/link`\
-        \ with `relation` = `like`,\n   `save`, `add_to_bag`, `dwell`, `skip`, `unlike`, `unsave`; see\
-        \ `LinkSignalMetadata`).\n   Weights: like +1, save +1.5, add_to_bag +2, dwell 0.5 · clip(relative\
-        \ dwell, 0, 2) where\n   relative dwell = (dwell / duration) / median over the user's dwells,\
-        \ fast skip (< 1.5 s)\n   or skip −0.5; recency decay 0.5^(interactions after it / 4).\n2. *Readouts*\
-        \ are fetched by id as attributes (no vector query) for the linked\n   and the candidate entities;\
-        \ they come from entity `metadata.readout` (see\n   `EntityReadout`), with stored metadata filling\
-        \ entities not re-indexed yet.\n3. *User state*: the positive interactions go to the model server.\
-        \ The\n   result is cached per (user, positive-interaction list) and refreshed in the background\n\
-        \   after link writes. On failure the pooled taste formula is used and\n   `meta.state_source`\
-        \ is `fallback`.\n4. *Score* (the live-shop dashboard's formula): per field, the expected log-lift\n\
-        \   log S − log P of the user state S over the candidates' marginal P (Dirichlet prior\n   α =\
-        \ 2, eps 1e-3; skips push mass away, β = 1.5), centred per field, minus 1.5 per\n   recently interacted\
-        \ item of the same product (`metadata.parent_asin` / `product_id`).\n   Candidates without a readout\
-        \ are dropped (`explain.dropped.no_readout`).\n\nReadout-state models only rerank; other ops answer\
-        \ `model_op_unsupported`.\n"
+      summary: Rerank your candidate items for a user, on the Galya model
+      description: 'Convenience for `POST /v1/user` with `rank.item_ids`: put your own candidates (from
+        your search,
+
+        a collection page, a carousel) in this shopper''s taste order. Candidates without a readout yet
+        are
+
+        kept, unscored, after the ranked ones (and listed under `explain.dropped.no_readout`), so a rerank
+
+        never loses your items. Each result carries `score` and `contributions` (the readout fields that
+
+        drove it). `include_state: evidence` adds the shopper''s taste (`explain.user_state`): per field
+        the
+
+        top options with `p` and the catalog `prior`.
+
+
+        Taste comes from the shopper''s interactions (`POST /v1/user`), read by the model under the
+
+        schema''s fields; it is cached and refreshed in the background after new interactions
+
+        (`meta.state_source`). Typical p95 is under 100 ms for 30 candidates from a server in the same
+
+        region with a kept-alive connection.
+
+        '
       security:
       - WorkspaceApiKey: []
       - WorkspaceBearer: []
@@ -1254,23 +1331,24 @@ paths:
             schema:
               $ref: '#/components/schemas/RerankRequest'
             examples:
-              vector:
+              rerank:
                 value:
-                  user_id: u1
+                  user_id: shopper_1
                   candidate_ids:
                   - dress_a
                   - dress_b
-              readoutState:
-                summary: H&M user-state model (no vectors)
+                  - dress_c
+              withTaste:
+                summary: With the shopper's taste
                 value:
                   user_id: shopper_1
                   candidate_ids:
                   - vid_1
                   - vid_2
                   - vid_3
-                  model_id: hm-user-state-v1
                   include:
                   - metadata
+                  include_state: evidence
       responses:
         '200':
           description: Reranked candidates
@@ -1280,315 +1358,10 @@ paths:
                 $ref: '#/components/schemas/RerankResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
-      x-codeSamples:
-      - lang: typescript
-        label: rerankForUser
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.rerankForUser({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    body: {\n      user_id: \"\
-          u1\",\n      candidate_ids: [\n        \"dress_a\",\n        \"dress_b\",\n      ],\n    },\n\
-          \  });\n\n  console.log(result);\n}\n\nrun();"
       x-mint:
         metadata:
-          description: Rerank supplied candidate entity ids for a user. Vector models (cosine-rank-v1,
-            ...) rank the candidates against the user's state vector. POST /v1/rerank...
-          noindex: true
-  /v1/links:
-    get:
-      tags:
-      - core
-      operationId: listEntityLinks
-      summary: List taste graph links
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      - name: parent_id
-        in: query
-        schema:
-          type: string
-      - name: child_id
-        in: query
-        schema:
-          type: string
-      - name: relation
-        in: query
-        schema:
-          type: string
-      - name: cursor
-        in: query
-        schema:
-          type: string
-      - name: limit
-        in: query
-        schema:
-          type: integer
-          minimum: 1
-          maximum: 100
-      responses:
-        '200':
-          description: Page of links
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LinkPage'
-      x-codeSamples:
-      - lang: typescript
-        label: listEntityLinks
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.listEntityLinks({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  });\n\n  console.log(result);\n}\n\n\
-          run();"
-      x-mint:
-        metadata:
-          description: List taste graph links. GET /v1/links in the Galya API reference.
-          noindex: true
-  /v1/clusters:
-    get:
-      tags:
-      - core
-      operationId: listIntelligenceClusters
-      summary: List audience or taste-region clusters
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      - name: concept
-        in: query
-        required: true
-        schema:
-          type: string
-          enum:
-          - audiences
-          - taste_regions
-      - name: entity_type
-        in: query
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Cluster summaries
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-        '400':
-          $ref: '#/components/responses/BadRequest'
-      x-codeSamples:
-      - lang: typescript
-        label: listIntelligenceClusters
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.listIntelligenceClusters({\n   \
-          \ workspaceApiKey: process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    concept: \"\
-          taste_regions\",\n  });\n\n  console.log(result);\n}\n\nrun();"
-      x-mint:
-        metadata:
-          description: List audience or taste-region clusters. GET /v1/clusters in the Galya API reference.
-          noindex: true
-  /v1/clusters/{clusterId}:
-    get:
-      tags:
-      - core
-      operationId: getIntelligenceCluster
-      summary: Read a cluster and its highest-scoring members
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      - name: clusterId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        '200':
-          description: Cluster detail
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-        '404':
-          $ref: '#/components/responses/NotFound'
-      x-codeSamples:
-      - lang: typescript
-        label: getIntelligenceCluster
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.getIntelligenceCluster({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    clusterId: \"2efe1e4b-aa8e-4a64-b0b3-230b70c83c71\"\
-          ,\n  });\n\n  console.log(result);\n}\n\nrun();"
-      x-mint:
-        metadata:
-          description: Read a cluster and its highest-scoring members. GET /v1/clusters/{clusterId} in
-            the Galya API reference.
-          noindex: true
-  /v1/swarms:
-    get:
-      tags:
-      - core
-      operationId: listSwarms
-      summary: List reusable customer cohorts
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      responses:
-        '200':
-          description: Swarm list
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-      x-codeSamples:
-      - lang: typescript
-        label: listSwarms
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.listSwarms({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  });\n\n  console.log(result);\n}\n\n\
-          run();"
-      x-mint:
-        metadata:
-          description: List reusable customer cohorts. GET /v1/swarms in the Galya API reference.
-          noindex: true
-    post:
-      tags:
-      - core
-      operationId: createSwarm
-      summary: Create a reusable customer cohort
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SwarmInput'
-      responses:
-        '201':
-          description: Swarm created
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-      x-codeSamples:
-      - lang: typescript
-        label: createSwarm
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  const result = await galya.core.createSwarm({\n    workspaceApiKey:\
-          \ process.env[\"GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    body: {},\n  });\n\n  console.log(result);\n\
-          }\n\nrun();"
-      x-mint:
-        metadata:
-          description: Create a reusable customer cohort. POST /v1/swarms in the Galya API reference.
-          noindex: true
-  /v1/swarms/{swarmId}:
-    get:
-      tags:
-      - core
-      operationId: getSwarm
-      summary: Read a customer cohort
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      - name: swarmId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Swarm detail
-        '404':
-          $ref: '#/components/responses/NotFound'
-      x-codeSamples:
-      - lang: typescript
-        label: getSwarm
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  await galya.core.getSwarm({\n    workspaceApiKey: process.env[\"\
-          GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    swarmId: \"<id>\",\n  });\n\n\n}\n\nrun();"
-      x-mint:
-        metadata:
-          description: Read a customer cohort. GET /v1/swarms/{swarmId} in the Galya API reference.
-          noindex: true
-    patch:
-      tags:
-      - core
-      operationId: updateSwarm
-      summary: Update a customer cohort
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      - name: swarmId
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SwarmInput'
-      responses:
-        '200':
-          description: Swarm updated
-        '404':
-          $ref: '#/components/responses/NotFound'
-      x-codeSamples:
-      - lang: typescript
-        label: updateSwarm
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  await galya.core.updateSwarm({\n    workspaceApiKey: process.env[\"\
-          GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    swarmId: \"<id>\",\n    body: {},\n  });\n\n\
-          \n}\n\nrun();"
-      x-mint:
-        metadata:
-          description: Update a customer cohort. PATCH /v1/swarms/{swarmId} in the Galya API reference.
-          noindex: true
-    delete:
-      tags:
-      - core
-      operationId: deleteSwarm
-      summary: Delete a customer cohort
-      security:
-      - WorkspaceApiKey: []
-      - WorkspaceBearer: []
-      parameters:
-      - $ref: '#/components/parameters/OptionalWorkspaceHeader'
-      - name: swarmId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '204':
-          description: Swarm deleted
-        '404':
-          $ref: '#/components/responses/NotFound'
-      x-codeSamples:
-      - lang: typescript
-        label: deleteSwarm
-        source: "import { Galya } from \"@galya-intelligence/galya-api\";\n\nconst galya = new Galya();\n\
-          \nasync function run() {\n  await galya.core.deleteSwarm({\n    workspaceApiKey: process.env[\"\
-          GALYA_WORKSPACE_API_KEY\"] ?? \"\",\n  }, {\n    swarmId: \"<id>\",\n  });\n\n\n}\n\nrun();"
-      x-mint:
-        metadata:
-          description: Delete a customer cohort. DELETE /v1/swarms/{swarmId} in the Galya API reference.
+          description: 'Rerank your candidate items for a user, on the Galya model. Convenience for POST
+            /v1/user with rank.itemids: put your own candidates (from your search, a...'
           noindex: true
 components:
   securitySchemes:
@@ -1607,14 +1380,20 @@ components:
       description: Search-only agent key (`galya_ag_...`); valid on /v1/agentic-search/search and /manifest
         only
   parameters:
-    ContentIdPath:
-      name: contentId
+    SchemaIdPath:
+      name: schemaId
       in: path
       required: true
       schema:
         type: string
-    EntityIdPath:
-      name: entityId
+    ItemIdPath:
+      name: itemId
+      in: path
+      required: true
+      schema:
+        type: string
+    UserIdPath:
+      name: userId
       in: path
       required: true
       schema:
@@ -1654,13 +1433,633 @@ components:
           example:
             error: workspace_mismatch
             message: API key does not belong to this workspace
-    InternalError:
-      description: Unexpected server error
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorBody'
   schemas:
+    ItemStatus:
+      type: string
+      enum:
+      - pending
+      - ready
+      - failed
+      description: '`pending`: queued for the model. `ready`: readout stored and current for the workspace
+        schema.
+
+        `failed`: the model could not read it (`error` says why); it does not rank until re-upserted.
+
+        '
+    Readout:
+      type: object
+      description: 'Field id -> option -> probability. Trained fields use the v3 schema ids (`color`,
+
+        `product_family`, …); custom questions appear as `q:<id>`. When supplied on input, a single
+
+        option string (`"Dress"`) or a `{option: p}` map is accepted per field and normalised.
+
+        '
+      additionalProperties:
+        oneOf:
+        - type: string
+        - type: object
+          additionalProperties:
+            type: number
+            minimum: 0
+      example:
+        color:
+          Black: 0.82
+          Navy: 0.12
+          Grey: 0.06
+        product_family:
+          Dress: 0.97
+          Skirt: 0.03
+    SchemaRef:
+      description: 'The schema a call reads items and taste through: a schema id (`galya-commerce-v3`,
+
+        `sch_…`), or an inline `SchemaDefinition` from your code, which is stored and resolved to
+
+        its content-addressed id (returned as `schema_id`).
+
+        '
+      oneOf:
+      - type: string
+        example: galya-commerce-v3
+      - $ref: '#/components/schemas/SchemaDefinition'
+    ItemReadout:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          $ref: '#/components/schemas/ItemStatus'
+        readout:
+          $ref: '#/components/schemas/Readout'
+        readout_source:
+          type: string
+          description: '`supplied`, or the model that generated the readout.'
+        error:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+    ItemFields:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 500
+        text:
+          type: string
+          description: Description or listing text the model reads.
+          maxLength: 20000
+        image_url:
+          type: string
+          format: uri
+          description: Primary image the model reads (https or a data URI).
+        metadata:
+          type: object
+          additionalProperties: true
+          description: 'Your fields, returned as-is and filterable with `metadata.<key>`. `product_id`
+            groups
+
+            variants for the same-product diversity penalty; `duration_s` enables relative dwell.
+
+            '
+    ItemInput:
+      allOf:
+      - type: object
+        required:
+        - id
+        properties:
+          id:
+            type: string
+            pattern: ^[A-Za-z0-9_.:-]{1,128}$
+            description: Your id for the item (e.g. a Shopify product GID suffix).
+          readout:
+            $ref: '#/components/schemas/Readout'
+      - $ref: '#/components/schemas/ItemFields'
+    PutItemRequest:
+      allOf:
+      - type: object
+        required:
+        - schema
+        properties:
+          schema:
+            $ref: '#/components/schemas/SchemaRef'
+          readout:
+            $ref: '#/components/schemas/Readout'
+      - $ref: '#/components/schemas/ItemFields'
+    ItemUpsertRequest:
+      type: object
+      required:
+      - schema
+      - items
+      properties:
+        schema:
+          $ref: '#/components/schemas/SchemaRef'
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ItemInput'
+    ItemUpsertResponse:
+      type: object
+      required:
+      - schema_id
+      - items
+      properties:
+        schema_id:
+          type: string
+          description: The id the call's schema resolved to.
+        job_id:
+          type: string
+          description: Not returned yet (readouts are queued per item); poll `GET /v1/item/{itemId}` or
+            `GET /v1/item?status=pending`.
+        items:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - status
+            properties:
+              id:
+                type: string
+              status:
+                $ref: '#/components/schemas/ItemStatus'
+              error:
+                type: string
+    Item:
+      allOf:
+      - type: object
+        required:
+        - id
+        - readouts
+        - created_at
+        - updated_at
+        properties:
+          id:
+            type: string
+          readouts:
+            type: object
+            description: Schema id -> this item's readout for that schema.
+            additionalProperties:
+              $ref: '#/components/schemas/ItemReadout'
+          created_at:
+            type: string
+            format: date-time
+          updated_at:
+            type: string
+            format: date-time
+      - $ref: '#/components/schemas/ItemFields'
+    ItemPage:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Item'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+    ScreenPosition:
+      type: object
+      description: Where the item sat on screen, as fractions of the viewport (layout-agnostic).
+      properties:
+        x:
+          type: number
+          minimum: 0
+          maximum: 1
+        y:
+          type: number
+          minimum: 0
+          maximum: 1
+        area:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Share of the viewport the item covered.
+        index:
+          type: integer
+          minimum: 0
+          description: Order the item came into view on this screen.
+    InteractionContext:
+      type: object
+      properties:
+        surface:
+          type: string
+          description: Where it happened, e.g. `collection`, `search`, `pdp`, `cart`, `email`, `feed`.
+        screen_id:
+          type: string
+          description: Groups interactions and impressions shown together on one screen.
+        query:
+          type: string
+          description: Search query or collection handle that produced the screen.
+        session_id:
+          type: string
+        position:
+          $ref: '#/components/schemas/ScreenPosition'
+    Interaction:
+      type: object
+      required:
+      - item_id
+      - tag
+      properties:
+        id:
+          type: string
+          maxLength: 128
+          description: Idempotency key. A repeated id is not counted twice.
+        item_id:
+          type: string
+        tag:
+          type: string
+          maxLength: 200
+          description: 'What happened, in plain language. Known signals: viewed / impression, liked,
+
+            unliked, saved, unsaved, added to bag, bought, skipped. Other text is stored as-is
+
+            and read as `other` (no weight) until the model learns it.
+
+            '
+          example: added to bag
+        at:
+          type: string
+          format: date-time
+          description: Defaults to the time Galya receives it.
+        dwell_ms:
+          type: integer
+          minimum: 0
+        context:
+          $ref: '#/components/schemas/InteractionContext'
+    SignalKind:
+      type: string
+      enum:
+      - impression
+      - view
+      - like
+      - unlike
+      - save
+      - unsave
+      - add_to_bag
+      - purchase
+      - dwell
+      - skip
+      - other
+    RankRequest:
+      type: object
+      properties:
+        item_ids:
+          type: array
+          maxItems: 1000
+          items:
+            type: string
+          description: Rerank exactly these. Omit to recommend from the catalog.
+        query:
+          type: string
+          maxLength: 500
+          description: 'Search intent ("black boots for work"). Items are retrieved by keyword match on
+            their
+
+            text and readout options, then ranked by taste. Same results as `POST /v1/search` for
+
+            this user. Combine with `where` to narrow further.
+
+            '
+        where:
+          type: string
+          description: Readout / metadata filter (same grammar as `GET /v1/item`).
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 20
+        exclude_interacted:
+          type: boolean
+          default: false
+          description: Drop items the user already bought or added to bag.
+    UserRequest:
+      type: object
+      required:
+      - user_id
+      - schema
+      properties:
+        user_id:
+          type: string
+          maxLength: 128
+          description: Your id for the shopper; an anonymous client id is fine.
+        schema:
+          $ref: '#/components/schemas/SchemaRef'
+        merge_from:
+          type: array
+          items:
+            type: string
+          maxItems: 10
+          description: Earlier (e.g. anonymous) user ids whose history moves into `user_id`.
+        interactions:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/Interaction'
+        rank:
+          $ref: '#/components/schemas/RankRequest'
+        include:
+          type: array
+          items:
+            type: string
+            enum:
+            - taste
+            - item
+          description: '`taste` adds the taste profile; `item` adds each ranked item''s title, image_url
+            and metadata.'
+    Reason:
+      type: object
+      required:
+      - field
+      - option
+      - lift
+      properties:
+        field:
+          type: string
+        option:
+          type: string
+        lift:
+          type: number
+          description: Contribution of this field/option to the score.
+    RankedItem:
+      type: object
+      required:
+      - item_id
+      - score
+      - reasons
+      properties:
+        item_id:
+          type: string
+        score:
+          type: number
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reason'
+        item:
+          $ref: '#/components/schemas/Item'
+    TasteField:
+      type: object
+      required:
+      - field
+      - top
+      properties:
+        field:
+          type: string
+        top:
+          type: array
+          items:
+            type: object
+            required:
+            - option
+            - p
+            - lift
+            properties:
+              option:
+                type: string
+              p:
+                type: number
+              lift:
+                type: number
+                description: p relative to the catalog baseline (1 = no preference).
+        evidence:
+          type: number
+          description: How much of the user's history speaks to this field.
+    Taste:
+      type: object
+      required:
+      - fields
+      - evidence
+      properties:
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/TasteField'
+        evidence:
+          type: number
+          description: Total decayed interaction weight; 0 = cold start.
+        summary:
+          type: string
+          description: The strongest preferences in one line, e.g. "Black, wrap silhouettes, midi length".
+    UserResponse:
+      type: object
+      required:
+      - user_id
+      - schema_id
+      - meta
+      properties:
+        user_id:
+          type: string
+        schema_id:
+          type: string
+        interactions:
+          type: array
+          items:
+            type: object
+            required:
+            - item_id
+            - tag
+            - read_as
+            - status
+            properties:
+              id:
+                type: string
+              item_id:
+                type: string
+              tag:
+                type: string
+              read_as:
+                $ref: '#/components/schemas/SignalKind'
+              status:
+                type: string
+                enum:
+                - recorded
+                - duplicate
+                - item_pending
+                - item_unknown
+        ranked:
+          type: array
+          items:
+            $ref: '#/components/schemas/RankedItem'
+        not_ranked:
+          type: array
+          description: Requested ids that could not be scored, with why.
+          items:
+            type: object
+            properties:
+              item_id:
+                type: string
+              reason:
+                type: string
+                enum:
+                - not_found
+                - pending
+                - failed
+        taste:
+          $ref: '#/components/schemas/Taste'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    ResponseMeta:
+      type: object
+      required:
+      - model_version
+      - state_source
+      properties:
+        model_version:
+          type: string
+          description: Which release of the Galya model answered. Informational; there is nothing to select.
+          example: galya-natural-language-commerce@2026-10
+        state_source:
+          type: string
+          enum:
+          - model
+          - cache
+          - pooled
+          - cold_start
+          description: 'Where the taste came from: the model, its cache, the pooled fallback, or none
+            yet.'
+        latency_ms:
+          type: number
+    SearchResponse:
+      type: object
+      required:
+      - schema_id
+      - ranked
+      - meta
+      properties:
+        schema_id:
+          type: string
+        ranked:
+          type: array
+          items:
+            $ref: '#/components/schemas/RankedItem'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    UserProfile:
+      type: object
+      required:
+      - user_id
+      - schema_id
+      - taste
+      - interaction_count
+      properties:
+        user_id:
+          type: string
+        schema_id:
+          type: string
+        taste:
+          $ref: '#/components/schemas/Taste'
+        interaction_count:
+          type: integer
+        interactions:
+          type: array
+          items:
+            allOf:
+            - $ref: '#/components/schemas/Interaction'
+            - type: object
+              properties:
+                read_as:
+                  $ref: '#/components/schemas/SignalKind'
+        updated_at:
+          type: string
+          format: date-time
+    TasteQuestion:
+      type: object
+      required:
+      - id
+      - text
+      - options
+      properties:
+        id:
+          type: string
+          pattern: ^[A-Za-z0-9_.-]{1,64}$
+          description: The readout field is `q:<id>`.
+        text:
+          type: string
+          maxLength: 500
+        options:
+          type: array
+          minItems: 2
+          maxItems: 24
+          uniqueItems: true
+          items:
+            type: string
+            maxLength: 200
+    SchemaDefinition:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          description: Label for humans. Not part of the id.
+        base:
+          type:
+          - string
+          - 'null'
+          default: galya-commerce-v3
+          description: 'Built-in trained schema to include (`galya-commerce-v3`: 219 fashion fields, the
+            only
+
+            fields the model''s own taste correction covers). `null` = only `questions`.
+
+            '
+          example: galya-commerce-v3
+        questions:
+          type: array
+          maxItems: 64
+          description: Custom questions, answered per item as fields `q:<id>` (zero-shot; accuracy unmeasured).
+          items:
+            $ref: '#/components/schemas/TasteQuestion'
+    Schema:
+      allOf:
+      - $ref: '#/components/schemas/SchemaDefinition'
+      - type: object
+        required:
+        - id
+        - builtin
+        - fields
+        - created_at
+        properties:
+          id:
+            type: string
+            description: '`galya-commerce-v3` for built-ins, else `sch_` + a hash of `base` and `questions`.'
+            example: sch_9b1f2e7c4a
+          builtin:
+            type: boolean
+          fields:
+            type: integer
+            description: Readout fields per item (base fields + questions).
+          items:
+            type: object
+            description: How many items have a readout for this schema, by status.
+            properties:
+              ready:
+                type: integer
+              pending:
+                type: integer
+              failed:
+                type: integer
+          created_at:
+            type: string
+            format: date-time
+    SchemaPage:
+      type: object
+      required:
+      - schemas
+      properties:
+        schemas:
+          type: array
+          items:
+            $ref: '#/components/schemas/Schema'
+        next_cursor:
+          type:
+          - string
+          - 'null'
     ErrorBody:
       type: object
       required:
@@ -1674,15 +2073,22 @@ components:
     SearchRequest:
       type: object
       additionalProperties: false
+      required:
+      - query
       properties:
         query:
           type: string
+          maxLength: 500
+        schema:
+          allOf:
+          - $ref: '#/components/schemas/SchemaRef'
+          description: Defaults to `galya-commerce-v3`.
         user_id:
           type: string
-        domain:
+          description: Order matches of equal strength by this user's taste.
+        where:
           type: string
-        model_id:
-          type: string
+          description: Readout / metadata filter (same grammar as `GET /v1/item`).
         limit:
           type: integer
           minimum: 1
@@ -1693,14 +2099,8 @@ components:
           items:
             type: string
             enum:
-            - metadata
-            - contents
-          description: Adds each result's name, type, metadata and/or contents (pictures live on contents).
-      anyOf:
-      - required:
-        - query
-      - required:
-        - user_id
+            - item
+          description: '`item` adds each result''s item card.'
     RecommendRequest:
       type: object
       additionalProperties: false
@@ -1709,14 +2109,6 @@ components:
       properties:
         user_id:
           type: string
-        domain:
-          type: string
-        type:
-          type: string
-          default: content
-        model_id:
-          type: string
-          description: Defaults to the workspace's `default_model_id`, else `cosine-rank-v1`.
         include:
           type: array
           items:
@@ -1744,15 +2136,6 @@ components:
           minItems: 1
           items:
             type: string
-        model_id:
-          type: string
-          description: 'Defaults to the workspace''s `default_model_id`, else `cosine-rank-v1`.
-
-            `hm-user-state-v1` ranks by entity readouts against a looked-up user state, no vectors
-
-            (see the operation description).
-
-            '
         include:
           type: array
           items:
@@ -1761,6 +2144,18 @@ components:
             - metadata
             - contents
           description: Adds each result's name, type, metadata and/or contents (pictures live on contents).
+        include_state:
+          type: string
+          enum:
+          - evidence
+          - all
+          default: evidence
+          description: 'Readout-state models: which fields `explain.user_state` lists. `evidence`: fields
+            the
+
+            user''s signals carry evidence on; `all`: every field of the candidates'' readouts.
+
+            '
     RerankResponse:
       type: object
       additionalProperties: true
@@ -1820,16 +2215,17 @@ components:
         explain:
           type: object
           additionalProperties: true
-          description: '`model_id`, `ranked_by` (`readout_loglik` for readout-state models), and for those
-            also
+          description: 'How the ranking was made: `ranked_by`, `state_source`, `state_fields` (fields
+            the shopper''s
 
-            `state_source`, `state_error`, `state_fields` (fields the model state covered),
-
-            `signals`, `readout_source` (`turbopuffer` / `metadata` counts) and
+            taste covered), `user_state` (see `ReadoutUserState`, with `include_state`), `signals`, and
 
             `dropped: { not_found, no_readout }`.
 
             '
+          properties:
+            user_state:
+              $ref: '#/components/schemas/ReadoutUserState'
         meta:
           type: object
           additionalProperties: true
@@ -1841,6 +2237,7 @@ components:
               enum:
               - model
               - cache
+              - stale
               - fallback
               - pooled
               description: 'Readout-state only. `model`: fresh from the model server; `cache`: stored
@@ -1851,664 +2248,71 @@ components:
                 configured) and the pooled formula ranked; `pooled`: no positive signal yet.
 
                 '
-    EntityReadout:
-      description: 'Convention for entity `metadata.readout` (set with `POST /v1/entity` or `/v1/index`),
-        read by
+    ReadoutUserState:
+      type: object
+      description: 'Readout-state rerank: the user state S the ranking used (pooled signals × the model
 
-        readout-state rankers. One entry per field id (schema v3 field ids/options, e.g. `color`,
+        correction), per field the top 3 options with their probability `p` and the catalog prior
 
-        `product_family`); each entry is one option, a `{option: p}` distribution (normalised on
-
-        read), or a `[{o, p}]` list. The dashboard''s `{fields: [{id, top: [{o, p}]}]}` form is
-
-        accepted too. Add `metadata.parent_asin` (or `product_id`) for the same-product penalty and
-
-        `metadata.duration_s` for relative dwell. Written to the keyword row as attributes
-
-        on index and by the `text_index` backfill job.
+        `prior` (the candidates'' marginal). Values are rounded to 4 significant digits.
 
         '
-      oneOf:
-      - type: object
-        additionalProperties:
-          oneOf:
-          - type: string
-          - type: object
-            additionalProperties:
-              type: number
-              minimum: 0
-          - type: array
-            items:
-              type: object
-              properties:
-                o:
-                  type: string
-                p:
-                  type: number
-      - type: object
-        required:
-        - fields
-        properties:
-          fields:
-            type: array
-            items:
-              type: object
-              required:
-              - id
-              - top
-              properties:
-                id:
-                  type: string
-                block:
-                  type: string
-                top:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      o:
-                        type: string
-                      p:
-                        type: number
-      example:
-        color:
-          Black: 0.8
-          Grey: 0.2
-        product_family: Dress
-        pattern:
-        - o: Solid
-          p: 0.9
-        - o: Stripe
-          p: 0.1
-    LinkItem:
-      type: object
       required:
-      - parent_id
-      - child_id
-      - relation
-      - weight
-      - updated_at
+      - fields
+      - model_fields
       properties:
-        parent_id:
-          type: string
-        child_id:
-          type: string
-        relation:
-          type: string
-        weight:
-          type: number
-          minimum: 0
-          maximum: 1
-        metadata:
-          $ref: '#/components/schemas/LinkSignalMetadata'
-        updated_at:
-          type: string
-          format: date-time
-    LinkPage:
-      type: object
-      required:
-      - items
-      - next_cursor
-      properties:
-        items:
+        fields:
           type: array
-          items:
-            $ref: '#/components/schemas/LinkItem'
-        next_cursor:
-          oneOf:
-          - type: string
-          - type: 'null'
-    SwarmInput:
-      type: object
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        entity_ids:
-          type: array
-          items:
-            type: string
-        config:
-          type: object
-          additionalProperties: true
-    IndexEntityRequest:
-      type: object
-      properties:
-        model_id:
-          type: string
-          description: 'Encoder public id, or a predictor/decoder whose policy `encoder_model_id` is followed.
-
-            Omit to index with every registry encoder that applies to `domain`.
-
-            '
-        content_id:
-          type: string
-          description: 'Public id of the content to write. When present, `entity_id` names the (existing)
-
-            entity this content represents and no entity is created.
-
-            '
-        entity_id:
-          type: string
-          description: 'With `content_id`: the entity to link to (must exist). Alone: the one-record
-
-            shortcut that upserts the entity and a same-id content. Alias `id`.
-
-            '
-        id:
-          type: string
-        kind:
-          type: string
-          enum:
-          - text
-          - image
-          - audio
-          - video
-          description: Indexed content modality. Defaults to `image` when only `image_url` is given, else
-            `text`.
-        role:
-          type: string
-          description: Caller-defined role inside the entity, e.g. `description`, `primary_image`
-        weight:
-          type: number
-          minimum: 0
-          default: 1
-          description: Relative weight of this content when the entity vector is composed
-        image_url:
-          type: string
-          format: uri
-          description: Image to encode (SigLIP-style encoders). Also read from `metadata.image_url` in
-            the shortcut shape.
-        text:
-          type: string
-          description: Alias of `content`
-        type:
-          type: string
-          default: content
-          description: Entity type; used only when an entity is upserted (shortcut shape)
-        domain:
-          type: string
-          description: 'Optional when `model_id` names a domain-scoped model (or one whose encoder is);
-
-            that domain is then implied. A conflicting value is `409 domain_mismatch`.
-
-            '
-        name:
-          type: string
-        content:
-          type: string
-        source_url:
-          type: string
-          format: uri
-        url:
-          type: string
-          format: uri
-          description: Alias of source_url
-        metadata:
-          type: object
-          additionalProperties: true
-          properties:
-            readout:
-              $ref: '#/components/schemas/EntityReadout'
-            parent_asin:
-              type: string
-              description: Product grouping for the readout-state same-product penalty (`product_id` also
-                accepted).
-            duration_s:
-              type: number
-              description: Item (video) length in seconds, for relative dwell.
-        embedding:
-          type: array
-          items:
-            type: number
-          description: 'Finite numbers. Used when the target encoder allows client embeddings and the
-
-            length matches that encoder''s dimensions. With multiple registry encoders, each
-
-            encoder uses the embedding only when it fits; the others encode from text.
-
-            '
-        embedding_model:
-          type: string
-          deprecated: true
-          description: Use `model_id` (encoder) instead
-    IndexEntityPublic:
-      type: object
-      required:
-      - id
-      - type
-      - domain
-      - name
-      - metadata
-      properties:
-        id:
-          type: string
-        type:
-          type: string
-        domain:
-          type: string
-          nullable: true
-        name:
-          type: string
-          nullable: true
-        metadata:
-          type: object
-          additionalProperties: true
-    IndexEntityResponse:
-      type: object
-      required:
-      - entity
-      - content
-      - vector_indexed
-      properties:
-        entity:
-          oneOf:
-          - $ref: '#/components/schemas/IndexEntityPublic'
-          - type: 'null'
-          description: The entity this content represents; null for unattached content
-        content:
-          oneOf:
-          - $ref: '#/components/schemas/ContentSummary'
-          - type: 'null'
-          description: The content that was written; null when `POST /v1/entity` wrote identity only
-        model_id:
-          type: string
-          description: Primary encoder that received a vector (first successful registry target)
-        vector_indexed:
-          type: boolean
-        indexes:
-          type: array
-          description: One row per encoder the registry selected for this write
           items:
             type: object
             required:
-            - model_id
-            - vector_indexed
+            - id
+            - top
+            - model
             properties:
-              model_id:
+              id:
                 type: string
-              vector_indexed:
+                description: Field id, e.g. `color`
+              top:
+                type: array
+                maxItems: 3
+                items:
+                  type: object
+                  required:
+                  - o
+                  - p
+                  - prior
+                  properties:
+                    o:
+                      type: string
+                    p:
+                      type: number
+                    prior:
+                      type: number
+              model:
                 type: boolean
-              error:
-                type: string
-    EntityDetail:
-      type: object
-      required:
-      - id
-      - type
-      - domain
-      - name
-      - content
-      - source_url
-      - metadata
-      - created_at
-      - updated_at
-      properties:
-        id:
-          type: string
-        type:
-          type: string
-        domain:
-          type:
-          - string
-          - 'null'
-        name:
-          type:
-          - string
-          - 'null'
-        content:
-          type:
-          - string
-          - 'null'
-          description: Text of the first text content (compatibility mirror of `contents`)
-        source_url:
-          type:
-          - string
-          - 'null'
-          description: First content `source_url` (compatibility mirror of `contents`)
-        metadata:
-          type: object
-          additionalProperties: true
-        content_count:
-          type: integer
-          minimum: 0
-        contents:
-          type: array
-          description: Every content linked to this entity
-          items:
-            $ref: '#/components/schemas/ContentSummary'
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-    ContentSummary:
-      type: object
-      required:
-      - id
-      - entity_id
-      - kind
-      - role
-      - weight
-      - domain
-      - name
-      - text
-      - source_url
-      - image_url
-      - metadata
-      - created_at
-      - updated_at
-      properties:
-        id:
-          type: string
-        entity_id:
-          type:
-          - string
-          - 'null'
-          description: Entity this content represents; null when unattached
-        kind:
-          type: string
-          enum:
-          - text
-          - image
-          - audio
-          - video
-        role:
-          type:
-          - string
-          - 'null'
-        weight:
-          type: number
-        domain:
-          type:
-          - string
-          - 'null'
-        name:
-          type:
-          - string
-          - 'null'
-        text:
-          type:
-          - string
-          - 'null'
-        source_url:
-          type:
-          - string
-          - 'null'
-        image_url:
-          type:
-          - string
-          - 'null'
-        metadata:
-          type: object
-          additionalProperties: true
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-    EntityContentsResponse:
-      type: object
-      required:
-      - entity_id
-      - items
-      properties:
-        entity_id:
-          type: string
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/ContentSummary'
-    AttachContentsRequest:
-      type: object
-      properties:
-        content_id:
-          type: string
-        content_ids:
+                description: The model correction applied on this field
+        model_fields:
           type: array
           items:
             type: string
-        role:
-          type: string
-        weight:
-          type: number
-          minimum: 0
-    AttachedContent:
-      allOf:
-      - $ref: '#/components/schemas/ContentSummary'
-      - type: object
-        required:
-        - vector_indexes
-        properties:
-          vector_indexes:
-            type: array
-            description: Encoders whose stored vector rows were retagged to the new owner
-            items:
-              type: string
-    AttachContentsResponse:
-      type: object
-      required:
-      - entity_id
-      - attached
-      - missing
-      properties:
-        entity_id:
-          type: string
-        attached:
-          type: array
-          items:
-            $ref: '#/components/schemas/AttachedContent'
-        missing:
-          type: array
-          description: Content ids in the request that do not exist
-          items:
-            type: string
-    DetachContentResponse:
-      type: object
-      required:
-      - entity_id
-      - detached
-      properties:
-        entity_id:
-          type: string
-        detached:
-          $ref: '#/components/schemas/AttachedContent'
-    EntitySingleResponse:
-      type: object
-      required:
-      - entity
-      properties:
-        entity:
-          $ref: '#/components/schemas/EntityDetail'
-    EntityTypesResponse:
-      type: object
-      required:
-      - types
-      properties:
-        types:
-          type: array
-          description: Distinct entity types this workspace has used, alphabetical
-          items:
-            type: string
-    LinkEntityRequest:
-      type: object
-      properties:
-        content_id:
-          type: string
-          description: 'Child *entity* id (the name predates the entity/content split; aliases `child_id`,
-
-            `entity_id`). This links two entities — a user to a product — and drives the
-
-            parent''s user-state vector. To attach an indexed content to an entity use
-
-            `POST /v1/entity/{entityId}/contents`.
-
-            '
-        child_id:
-          type: string
-        entity_id:
-          type: string
-        relation:
-          type: string
-          default: about
-          description: 'Free text. These relations are interaction *signals* read by readout-state rankers
-
-            (`hm-user-state-v1`): `like`, `unlike`, `save`, `unsave`, `add_to_bag`, `dwell`, `skip`
-
-            (aliases: `about`/`liked` → like, `saved` → save, `add_to_cart`/`purchase`/`purchased` →
-
-            add_to_bag, `skipped` → skip). One link per (parent, child, relation): posting it again
-
-            updates it. like/unlike and save/unsave are toggles, the one set last wins (deleting the
-
-            `like` link also cancels). `skip`, `unlike` and `unsave` links are not averaged into the
-
-            composed state vector.
-
-            '
-        weight:
-          type: number
-          minimum: 0
-          maximum: 1
-          default: 1
-          description: Weight in the composed (weighted-mean) state vector. Readout-state rankers ignore
-            it and use the signal weights of the model policy.
-        metadata:
-          $ref: '#/components/schemas/LinkSignalMetadata'
-        model_id:
-          type: string
-          description: 'Latent model (decoder) that recomposes the parent''s state vector.
-
-            Must be an active decoder in the platform or workspace catalog.
-
-            Omitted uses the workspace compose default.
-
-            '
-    LinkSignalMetadata:
-      type: object
-      additionalProperties: true
-      description: 'Signal payload stored on the link (under 4 KB). A `dwell` link needs `dwell_ms` (or
-        `dwell_s`)
-
-        to count as a signal; a dwell under 1.5 s counts as a fast skip.
-
-        '
-      properties:
-        dwell_ms:
-          type: number
-          minimum: 0
-          description: Time on screen in ms (`dwell` links).
-        dwell_s:
-          type: number
-          minimum: 0
-          description: Alternative to `dwell_ms`, in seconds.
-        duration_s:
-          type: number
-          exclusiveMinimum: 0
-          description: Item length in seconds. Falls back to the child entity's `metadata.duration_s`,
-            else 30.
-        at:
-          oneOf:
-          - type: number
-            description: ms epoch
-          - type: string
-            format: date-time
-          description: When the interaction happened. Defaults to the link's `updated_at`; orders signals
-            for recency decay.
+          description: Fields where the model correction applied.
       example:
-        dwell_ms: 8200
-        duration_s: 21
-        at: 1793340000000
-    LinkStateReady:
-      type: object
-      required:
-      - status
-      - history_count
-      properties:
-        status:
-          type: string
-          const: ready
-        history_count:
-          type: integer
-          minimum: 0
-    LinkStatePending:
-      type: object
-      required:
-      - status
-      - reason
-      properties:
-        status:
-          type: string
-          const: pending
-        reason:
-          type: string
-    LinkEntityResponse:
-      type: object
-      required:
-      - parent_id
-      - child_id
-      - relation
-      - weight
-      - state
-      properties:
-        parent_id:
-          type: string
-        child_id:
-          type: string
-        relation:
-          type: string
-        weight:
-          type: number
-        metadata:
-          $ref: '#/components/schemas/LinkSignalMetadata'
-        model_id:
-          type: string
-          description: Decoder that composed the parent state vector
-        state:
-          oneOf:
-          - $ref: '#/components/schemas/LinkStateReady'
-          - $ref: '#/components/schemas/LinkStatePending'
-    LinkStateCleared:
-      type: object
-      required:
-      - status
-      properties:
-        status:
-          type: string
-          const: cleared
-          description: No links remain; the parent's state vectors were deleted
-    UnlinkEntityResponse:
-      type: object
-      required:
-      - parent_id
-      - child_id
-      - relations
-      - removed
-      - state
-      properties:
-        parent_id:
-          type: string
-        child_id:
-          type: string
-        relations:
-          type: array
-          items:
-            type: string
-          description: Relations that were removed
-        removed:
-          type: integer
-          minimum: 1
-        model_id:
-          type: string
-          description: Decoder that recomposed the parent state vector
-        state:
-          oneOf:
-          - $ref: '#/components/schemas/LinkStateReady'
-          - $ref: '#/components/schemas/LinkStatePending'
-          - $ref: '#/components/schemas/LinkStateCleared'
+        fields:
+        - id: color
+          top:
+          - o: Black
+            p: 0.62
+            prior: 0.31
+          - o: Red
+            p: 0.17
+            prior: 0.2
+          - o: White
+            p: 0.09
+            prior: 0.18
+          model: true
+        model_fields:
+        - color
     AgenticSearchOp:
       type: string
       enum:
@@ -2526,7 +2330,6 @@ components:
       - allowed_ops
       - allowed_domains
       - allowed_types
-      - default_model_id
       - max_results
       - max_hops
       - expose_metadata
@@ -2554,8 +2357,6 @@ components:
           items:
             type: string
           description: Empty means every entity type
-        default_model_id:
-          type: string
         max_results:
           type: integer
           minimum: 1
@@ -2614,8 +2415,6 @@ components:
           type: array
           items:
             type: string
-        default_model_id:
-          type: string
         max_results:
           type: integer
         max_hops:
@@ -2742,19 +2541,12 @@ components:
           $ref: '#/components/schemas/AgenticSearchOp'
         user_id:
           type: string
-          description: Required for search
-          recommend: ''
-          rerank: ''
+          description: Required for search, recommend, rerank
         domain:
           type: string
-          description: 'Catalog slice for search and recommend. Optional when the model chain implies
-            a
+          description: 'Catalog slice for search and recommend. When the workspace policy restricts
 
-            domain (predictor `domain`, else its encoder''s `domain`); a conflicting value is
-
-            `409 domain_mismatch`. When the workspace restricts `allowed_domains`, an unscoped
-
-            model still needs an explicit domain (`400 domain_required`).
+            `allowed_domains`, it must be one of them (`400 domain_required` if omitted).
 
             '
         type:
@@ -2779,9 +2571,6 @@ components:
         limit:
           type: integer
           description: Clamped to max_results
-        model_id:
-          type: string
-          description: Defaults to the policy's default_model_id
     AgenticSearchResponse:
       type: object
       required:

@@ -22,33 +22,25 @@ import yaml
 
 # (method, path) pairs, grouped by product area.
 PUBLIC_OPERATIONS: set[tuple[str, str]] = {
-    # Index
-    ("post", "/v1/index"),
-    # Entity
-    ("post", "/v1/entity"),
-    ("get", "/v1/entity/{entityId}"),
-    ("get", "/v1/entities/types"),
-    ("get", "/v1/entity/{entityId}/contents"),
-    ("post", "/v1/entity/{entityId}/contents"),
-    ("delete", "/v1/entity/{entityId}/contents/{contentId}"),
-    # Link
-    ("post", "/v1/entity/{parentId}/link"),
-    ("delete", "/v1/entity/{parentId}/link/{childId}"),
-    ("get", "/v1/links"),
-    # Query
+    # Items (guides/items.mdx)
+    ("post", "/v1/item"),
+    ("get", "/v1/item"),
+    ("get", "/v1/item/{itemId}"),
+    ("put", "/v1/item/{itemId}"),
+    ("delete", "/v1/item/{itemId}"),
+    # Users (guides/users.mdx)
+    ("post", "/v1/user"),
+    ("get", "/v1/user/{userId}"),
+    ("delete", "/v1/user/{userId}"),
+    # Schemas (guides/schemas.mdx)
+    ("post", "/v1/schemas"),
+    ("get", "/v1/schemas"),
+    ("get", "/v1/schemas/{schemaId}"),
+    ("delete", "/v1/schemas/{schemaId}"),
+    # Ranking shortcuts
     ("post", "/v1/search"),
     ("post", "/v1/recommend"),
     ("post", "/v1/rerank"),
-    ("get", "/v1/models"),
-    ("patch", "/v1/models/defaults"),
-    # Cohorts and audience types (guides/audience-types.mdx)
-    ("get", "/v1/swarms"),
-    ("post", "/v1/swarms"),
-    ("get", "/v1/swarms/{swarmId}"),
-    ("patch", "/v1/swarms/{swarmId}"),
-    ("delete", "/v1/swarms/{swarmId}"),
-    ("get", "/v1/clusters"),
-    ("get", "/v1/clusters/{clusterId}"),
     # Connectors (not the OAuth callback, which only the orchestrator calls)
     ("get", "/v1/connectors/registry"),
     ("get", "/v1/connectors/registry/{publicId}"),
@@ -207,7 +199,10 @@ def main() -> None:
 
     text = yaml.safe_dump(spec, sort_keys=False, allow_unicode=True, width=100)
     for word in ("Fargate", "Hermes", "/v1/admin", "/v1/internal", "AdminKey", "ADMIN_API_KEY",
-                 "Admin-Key", "PlanetScale", "Turbopuffer", "/v1/user-state"):
+                 "Admin-Key", "PlanetScale", "Turbopuffer", "/v1/user-state",
+                 # The pre-item/user API: still served for existing callers, never documented.
+                 "/v1/index", "/v1/entity", "/v1/entities", "/v1/links", "/v1/models", "/v1/query",
+                 "/v1/swarms", "/v1/clusters", "GalyaQL", "cosine-rank-v1", "weighted-mean-v1"):
         if word in text:
             raise SystemExit(f"public spec still mentions {word!r}; add a scrub or drop the endpoint")
     path.write_text(text)
