@@ -1,6 +1,6 @@
 ---
 title: Authentication
-description: "How Galya API keys work: workspace secret, publishable, account and agent keys, the headers to send, and where your keys live in the dashboard."
+description: "How Galya API keys work: workspace secret, publishable and account keys, the headers to send, and where to find your keys."
 ---
 
 Send a key on every call:
@@ -11,7 +11,7 @@ Send a key on every call:
 The playground in these docs asks for the same header. Paste a workspace secret; requests go to `https://api.galya.io`.
 
 <Note>
-  Keys are issued when Galya sets up your workspace. There is no self-serve sign-up. If you don't have a workspace yet, email [hello@galya.io](mailto:hello@galya.io) about a [pilot](https://www.galya.io/pilot/).
+  Keys are issued when Galya sets up your workspace. There is no self-serve sign-up. If you don't have a workspace yet, [book a call](https://calendar.app.google/Cvsq8qoEaoAiJEQ48) about a [pilot](https://www.galya.io/pilot/).
 </Note>
 
 ## Keys
@@ -21,7 +21,6 @@ The playground in these docs asks for the same header. Paste a workspace secret;
 | Workspace secret | `galya_sk_` | Server calls for one workspace | [API keys](https://app.galya.io/api-keys) |
 | Workspace publishable | `galya_pk_` | Identifying the workspace in a browser. Not a secret. | [API keys](https://app.galya.io/api-keys) |
 | Account | `galya_ak_` | Server calls across workspaces. Also send `X-Galya-Workspace-Id`. | [Settings](https://app.galya.io/settings) |
-| Agent | `galya_ag_` | [Agentic search](/guides/agentic-search) only | Created with `POST /v1/agentic-search/keys` |
 
 <Warning>
   A secret is shown in full once, in the browser session that created it. If you only see a prefix, create a new secret on [API keys](https://app.galya.io/api-keys). Never put a secret in a browser app; call Galya from your server.

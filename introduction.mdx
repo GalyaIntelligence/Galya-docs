@@ -1,12 +1,12 @@
 ---
 title: Introduction
-description: "Galya API overview: send your catalog as items, record what shoppers do, and rank, search and recommend by taste with one natural-language commerce model."
+description: "Galya API overview: send your catalog as items, record what shoppers do, and rank, search and recommend by taste with one promptable model."
 ---
 
-Galya ranks a catalog for each shopper by taste. You send it two things — your **items** and what each **user** does with them — and ask it to rank, search or recommend. One model, `galya-natural-language-commerce`, does the reading and the ranking. There is nothing to train, tune or choose.
+Galya ranks a catalog for each shopper by taste. You send it two things — your **items** and what each **user** does with them — and ask it to rank, search or recommend. One model does the reading and the ranking. There is nothing to train, tune or choose.
 
 <Note>
-  Galya sets up each workspace as part of a [pilot](https://www.galya.io/pilot/). There is no self-serve sign-up. To get access, email [hello@galya.io](mailto:hello@galya.io). Once your workspace is live, your keys are on the [dashboard](https://app.galya.io/api-keys).
+  Galya sets up each workspace as part of a [pilot](https://www.galya.io/pilot/). There is no self-serve sign-up. To get access, [book a call](https://calendar.app.google/Cvsq8qoEaoAiJEQ48). Once your workspace is live, your keys are on the dashboard.
 </Note>
 
 The API is at `https://api.galya.io`. The interactive examples in these docs call it with the key you paste.
@@ -17,13 +17,13 @@ The API is at `https://api.galya.io`. The interactive examples in these docs cal
 | --- | --- | --- |
 | [Item](/guides/items) | One thing you sell or show: a product, a video, a look. Its text, image and your metadata. | `POST /v1/item` |
 | [User](/guides/users) | One shopper: their interactions with items, their taste, and every ranking for them. | `POST /v1/user` |
-| [Schema](/guides/schemas) | The questions the model answers about each item: the built-in fashion schema, your own questions, or both. | `GET /v1/schemas` |
+| [Schema](/guides/schemas) | The questions the model answers about each item: a [default schema](/guides/schema-library) for your domain, your own questions, or both. | `GET /v1/schemas` |
 
-`POST /v1/search`, `POST /v1/rerank` and `POST /v1/recommend` are shortcuts for the common ranking intents. [Agentic search](/guides/agentic-search) lets outside AI agents query your catalog under a policy you set.
+`POST /v1/search`, `POST /v1/rerank` and `POST /v1/recommend` are shortcuts for the common ranking intents.
 
 ## How it works
 
-1. **Items are read once.** When you upsert an item, the model reads its image and text and answers every question in the schema with a probability per option. That answer is the item's [readout](/concepts/readouts). It is the index: there are no embeddings to manage.
+1. **Items are read once.** When you upsert an item, the model reads its image and text and answers every question in the schema with a probability per option. That answer is the item's [readout](/concepts/taste-schemas). It is the index: there are no embeddings to manage.
 2. **Interactions are plain language.** Record what a shopper did with an item as a tag — `"liked"`, `"added to bag"`, `"watched 12s"`. Galya weights them and keeps the raw text.
 3. **Taste is computed at query time** from the readouts of the items a shopper interacted with, through whichever schema the call names. The same history works for any number of schemas.
 4. **Every ranked item says why.** Results carry `reasons`: the readout fields and options that lifted the item for this shopper.
@@ -46,7 +46,7 @@ The API is at `https://api.galya.io`. The interactive examples in these docs cal
   <Card title="Quickstart" icon="rocket" href="/quickstart">
     From an empty workspace to a ranked list in four calls.
   </Card>
-  <Card title="Readouts and taste" icon="list-check" href="/concepts/readouts">
+  <Card title="Taste Schemas" icon="list-check" href="/concepts/taste-schemas">
     What the model reads from each item, and how taste comes from it.
   </Card>
 </CardGroup>

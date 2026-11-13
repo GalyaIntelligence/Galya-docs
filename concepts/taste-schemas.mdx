@@ -1,25 +1,24 @@
 ---
-title: Readouts and taste
+title: Taste Schemas
 description: "How Galya works: the model reads each item into a readout (a probability per option for every schema field), and a shopper's taste is computed from the readouts of what they interacted with."
 ---
 
 ## Readouts
 
-When you upsert an item, the model looks at its image and text and answers every question in the [schema](/guides/schemas). Each answer is a probability per option. Together they are the item's **readout**:
+The model is promptable: when you upsert an item, it looks at the item's image and text and answers every question in the [schema](/guides/schemas) you name. Each answer is a probability per option. Together they are the item's **readout**. A diver watch read through the [watches schema](/guides/schema-library#watches):
 
 ```json
 {
-  "color": { "Black": 0.82, "Navy": 0.12, "Grey": 0.06 },
-  "product_family": { "Dress": 0.97, "Skirt": 0.03 },
-  "silhouette": { "Wrap": 0.74, "A-line": 0.2, "Sheath": 0.06 },
-  "q:occasion": { "Work": 0.61, "Party": 0.27, "Everyday": 0.12 }
+  "q:watch_style": { "Diver": 0.91, "Sports": 0.07, "Field": 0.02 },
+  "q:movement": { "Automatic": 0.84, "Quartz": 0.16 },
+  "q:case_material": { "Steel": 0.88, "Titanium": 0.12 },
+  "q:dial_color": { "Blue": 0.79, "Black": 0.21 }
 }
 ```
 
 The readout is the index. There is no separate indexing step and nothing to embed: once an item is `ready` for a schema, it can be ranked, filtered and searched through that schema.
 
-- The built-in `galya-commerce-v3` schema has 219 trained fashion fields (`color`, `product_family`, `silhouette`, `pattern`, `material`, and so on).
-- Your own questions show up as `q:<id>` fields.
+- Questions you write show up as `q:<id>` fields. `galya-commerce-v3`, the fashion and apparel default, uses plain field ids such as `color` and `product_family`.
 - One item can carry readouts for any number of schemas. Each is read once and reused until the item's `text` or `image_url` changes.
 - You can [supply a readout yourself](/guides/items#bring-your-own-readout) and skip the model.
 
@@ -41,9 +40,9 @@ An item's score for a shopper is how much more likely its readout is under their
 Every ranked item carries `reasons`: the fields and options that lifted it most.
 
 ```json
-{ "item_id": "sku_ankle_boot", "score": 0.42, "reasons": [
-  { "field": "color", "option": "Black", "lift": 0.31 },
-  { "field": "material", "option": "Leather", "lift": 0.11 }
+{ "item_id": "watch_diver_42", "score": 0.42, "reasons": [
+  { "field": "q:watch_style", "option": "Diver", "lift": 0.31 },
+  { "field": "q:dial_color", "option": "Blue", "lift": 0.11 }
 ] }
 ```
 

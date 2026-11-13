@@ -33,15 +33,15 @@
         "groups": [
           {
             "group": "Get started",
-            "pages": ["introduction", "quickstart", "authentication", "dashboard"]
+            "pages": ["introduction", "quickstart", "authentication"]
           },
           {
             "group": "Concepts",
-            "pages": ["concepts/readouts"]
+            "pages": ["concepts/taste-schemas"]
           },
           {
             "group": "Catalog",
-            "pages": ["guides/items", "guides/schemas"]
+            "pages": ["guides/items", "guides/schemas", "guides/schema-library"]
           },
           {
             "group": "Shoppers",
@@ -50,10 +50,6 @@
           {
             "group": "Ranking shortcuts",
             "pages": ["guides/search", "guides/rerank", "guides/recommend"]
-          },
-          {
-            "group": "Agents and sources",
-            "pages": ["guides/agentic-search", "guides/connectors"]
           }
         ]
       },
@@ -64,12 +60,6 @@
     ]
   },
   "navbar": {
-    "links": [
-      {
-        "label": "Dashboard",
-        "href": "https://app.galya.io"
-      }
-    ],
     "primary": {
       "type": "button",
       "label": "Request access",

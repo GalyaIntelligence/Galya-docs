@@ -41,25 +41,8 @@ PUBLIC_OPERATIONS: set[tuple[str, str]] = {
     ("post", "/v1/search"),
     ("post", "/v1/recommend"),
     ("post", "/v1/rerank"),
-    # Connectors (not the OAuth callback, which only the orchestrator calls)
-    ("get", "/v1/connectors/registry"),
-    ("get", "/v1/connectors/registry/{publicId}"),
-    ("get", "/v1/connectors"),
-    ("post", "/v1/connectors"),
-    ("get", "/v1/connectors/{connectorId}"),
-    ("patch", "/v1/connectors/{connectorId}"),
-    ("delete", "/v1/connectors/{connectorId}"),
-    ("post", "/v1/connectors/{connectorId}/test"),
-    ("post", "/v1/connectors/{connectorId}/sync"),
-    ("post", "/v1/connectors/requests"),
-    # Agentic search
-    ("get", "/v1/agentic-search/config"),
-    ("put", "/v1/agentic-search/config"),
-    ("get", "/v1/agentic-search/keys"),
-    ("post", "/v1/agentic-search/keys"),
-    ("delete", "/v1/agentic-search/keys/{keyId}"),
-    ("get", "/v1/agentic-search/manifest"),
-    ("post", "/v1/agentic-search/search"),
+    # Connectors and agentic search stay live for workspaces that use them, but are not
+    # in the public docs.
 }
 
 HTTP_METHODS = {"get", "put", "post", "delete", "patch", "head", "options", "trace"}

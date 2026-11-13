@@ -1,18 +1,18 @@
 ---
 title: Schemas
-description: "Galya schemas: the built-in galya-commerce-v3 fashion schema and your own natural-language questions, defined in code, content-addressed and unlimited per workspace."
+description: "Galya schemas: the prompt the model answers for every item. Start from a default schema for your domain or write your own questions, defined in code, content-addressed and unlimited per workspace."
 api: "POST /v1/schemas"
 ---
 
-A schema is the set of questions the model answers about each item. Every item and user call names one. Use the built-in schema, add your own questions on top of it, or use only your own.
+The model is promptable, and a schema is its prompt: the questions it answers about each item, each with a fixed set of options. Every item and user call names one. Start from a [default schema](/guides/schema-library) for your domain, extend it with your own questions, or write your own from scratch.
 
-## The built-in schema
+## Default schemas
 
-`galya-commerce-v3` has 219 trained fashion fields: `color`, `product_family`, `silhouette`, `pattern`, `material`, `occasion`-style fields and more. It is the best-measured option, and the model's taste refinement covers its fields. Start here.
+The [schema library](/guides/schema-library) has a default schema for fashion and apparel, travel, hospitality, tech and electronics, watches, trading cards and video games. Use one by id or inline, or copy it and change the questions.
 
 ## Your own questions
 
-A question has an `id`, the question `text` and 2 to 24 `options`. The model answers it per item as the field `q:<id>`.
+A question has an `id`, the question `text` and 2 to 24 `options`. The model answers it per item as the field `q:<id>`. Write questions the way you would ask a merchandiser who can see the product.
 
 ```json
 {
@@ -25,9 +25,9 @@ A question has an `id`, the question `text` and 2 to 24 `options`. The model ans
 }
 ```
 
-- `base: "galya-commerce-v3"` includes the 219 built-in fields as well; `base: null` uses only your questions.
+- `base` includes another schema's fields as well (here the 219 fields of `galya-commerce-v3`); `base: null` uses only your questions.
 - Up to 64 questions per schema.
-- Custom questions are answered zero-shot. Check a few readouts before relying on a new question.
+- Read a few items' readouts (`GET /v1/item/{itemId}?schema=...`) to see how the model answers a new question, and tune the wording or options.
 
 <Tip>
   Keep schemas in your code and send the definition inline as `schema` on `/v1/item` and `/v1/user`. Galya stores it the first time and returns its id as `schema_id`. You never have to call this endpoint.
@@ -60,10 +60,10 @@ curl https://api.galya.io/v1/schemas \
 
 ## Manage schemas
 
-- `GET /v1/schemas` lists the workspace's schemas and the built-in ones.
+- `GET /v1/schemas` lists every schema the workspace has used or registered, plus `galya-commerce-v3`.
 - `GET /v1/schemas/{schemaId}` returns one, with how many items have a readout for it.
 - `DELETE /v1/schemas/{schemaId}` removes a schema you created.
 
 ## Taste across schemas
 
-Interactions are stored once, without a schema. A user call computes taste through the schema it names, so one shopper's history can be read as fashion attributes in one call and as your `q:occasion` question in the next. If items don't have a readout for that schema yet, they are queued and listed under `not_ranked` with `pending`.
+Interactions are stored once, without a schema. A user call computes taste through the schema it names, so one shopper's history can be read through a default schema in one call and through your own `q:occasion` question in the next. If items don't have a readout for that schema yet, they are queued and listed under `not_ranked` with `pending`.
