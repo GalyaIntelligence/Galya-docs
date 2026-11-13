@@ -53,6 +53,10 @@ jobs:
           test -f openapi/openapi.yaml || test -f openapi/openapi.json
           chmod +x scripts/validate-mintlify-speakeasy-openapi.sh scripts/pin-docs-playground.sh
           ./scripts/pin-docs-playground.sh
+          # Publish customer-facing endpoints only; admin, internal and
+          # control-plane routes stay out of the public docs.
+          python3 -m pip install --quiet pyyaml
+          python3 scripts/filter-public-openapi.py openapi/openapi.yaml
           ./scripts/validate-mintlify-speakeasy-openapi.sh
 
       - name: Commit Speakeasy-generated OpenAPI
