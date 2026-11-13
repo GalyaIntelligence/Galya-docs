@@ -19,7 +19,7 @@
     },
     "url": "full",
     "mdx": {
-      "server": "https://dev.api.galya.io",
+      "server": "https://api.galya.io",
       "auth": {
         "method": "key",
         "name": "X-API-Key"
@@ -33,31 +33,27 @@
         "groups": [
           {
             "group": "Get started",
-            "pages": [
-              "introduction",
-              "dashboard",
-              "authentication",
-              "quickstart",
-              "development-api"
-            ]
+            "pages": ["introduction", "quickstart", "authentication", "dashboard"]
+          },
+          {
+            "group": "Concepts",
+            "pages": ["concepts/readouts"]
           },
           {
             "group": "Catalog",
-            "pages": [
-              "concepts/catalog-and-taste",
-              "guides/entities",
-              "guides/index",
-              "guides/link",
-              "guides/unlink"
-            ]
+            "pages": ["guides/items", "guides/schemas"]
           },
           {
-            "group": "Query",
-            "pages": ["guides/search", "guides/recommend", "guides/rerank", "guides/models"]
+            "group": "Shoppers",
+            "pages": ["guides/users"]
+          },
+          {
+            "group": "Ranking shortcuts",
+            "pages": ["guides/search", "guides/rerank", "guides/recommend"]
           },
           {
             "group": "Agents and sources",
-            "pages": ["guides/agentic-search", "guides/connectors", "guides/audience-types"]
+            "pages": ["guides/agentic-search", "guides/connectors"]
           }
         ]
       },

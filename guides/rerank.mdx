@@ -1,32 +1,62 @@
 ---
 title: Rerank
-description: "Rerank a list of candidate entity ids for one person with the Galya rerank API, to reorder search, category, or feed results by what they respond to."
+description: "Reorder your own candidate list for one shopper with POST /v1/rerank: collection pages, search results and carousels in taste order, with the fields that drove each score."
 api: "POST /v1/rerank"
 ---
 
-You pass the candidates. Galya returns them ordered for that person. Use this when the shortlist already came from your own search.
+You already have a list to show — a collection page, your own search results, a carousel. Send the item ids and render them in the order Galya returns. This is the shortcut for [`POST /v1/user`](/guides/users#rank) with `rank.item_ids`.
 
-This playground posts to `https://dev.api.galya.io/v1/rerank`.
+Candidates without a readout yet are kept, unscored, after the ranked ones (and listed under `explain.dropped.no_readout`), so a rerank never loses your items. Typical p95 is under 100 ms of server time for 30 candidates.
 
 <ParamField body="user_id" type="string" required>
-  Person to order the list for.
+  The shopper to order the list for.
 </ParamField>
 
 <ParamField body="candidate_ids" type="string[]" required>
-  Entity ids to reorder. They must belong to this workspace.
+  Item ids to reorder.
 </ParamField>
 
-<ParamField body="model_id" type="string" default="cosine-rank-v1">
-  Scoring model. See [Models](/guides/models).
+<ParamField body="include" type="string[]">
+  `metadata` adds each result's name and metadata.
+</ParamField>
+
+<ParamField body="include_state" type="string" default="evidence">
+  Adds the shopper's taste as `explain.user_state`: per field the top options with `p` and the catalog `prior`. `evidence` lists the fields their interactions speak to; `all` lists every field.
 </ParamField>
 
 <RequestExample>
 
 ```bash
-curl https://dev.api.galya.io/v1/rerank \
+curl https://api.galya.io/v1/rerank \
   -H "X-API-Key: $GALYA_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"user_demo","candidate_ids":["sku_crew"]}'
+  -d '{"user_id": "shopper_1", "candidate_ids": ["sku_ankle_boot", "sku_linen_shirt", "sku_slip_skirt"]}'
 ```
 
 </RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "results": [
+    {
+      "entity_id": "sku_slip_skirt",
+      "score": 0.42,
+      "contributions": [{ "field": "color", "option": "Black", "lift": 0.31 }],
+      "reason": "↑ matches liked: Black, Skirt"
+    },
+    { "entity_id": "sku_ankle_boot", "score": 0.18, "contributions": [], "reason": "↑ matches liked: Black" },
+    { "entity_id": "sku_linen_shirt", "score": -0.07, "contributions": [], "reason": "↓ less of: White" }
+  ],
+  "meta": { "state_source": "cache" }
+}
+```
+
+</ResponseExample>
+
+`entity_id` is the item id you sent. `reason` is a short, display-ready explanation; `contributions` are the readout fields and options behind the score.
+
+<Tip>
+  To record the interaction that led to the page and rerank it in the same round trip, use [`POST /v1/user`](/guides/users) with both `interactions` and `rank.item_ids`.
+</Tip>

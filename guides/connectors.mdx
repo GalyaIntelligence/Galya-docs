@@ -1,17 +1,15 @@
 ---
 title: Connectors
-description: "Connect a commerce or content source to Galya, test the connection, and sync its items into your catalog with the connectors API and playground."
+description: "Connect a commerce or content source to Galya, test the connection, and sync its products into your catalog with the connectors API."
 api: "GET /v1/connectors"
 ---
 
-A connector pulls items from a source you connect and indexes them into the workspace. Synced items show on [Catalog](https://app.galya.io/catalog), same as items you [index](/guides/index) yourself.
-
-This playground lists the workspace’s connections. It calls `https://dev.api.galya.io/v1/connectors`. Authorize with the workspace secret from [API keys](https://app.galya.io/api-keys).
+A connector pulls products from a source you connect (a store, a CMS) into your catalog, so you don't have to send them yourself with [`POST /v1/item`](/guides/items). Synced products show on [Catalog](https://app.galya.io/catalog).
 
 <RequestExample>
 
 ```bash
-curl https://dev.api.galya.io/v1/connectors \
+curl https://api.galya.io/v1/connectors \
   -H "X-API-Key: $GALYA_API_KEY"
 ```
 
@@ -19,13 +17,11 @@ curl https://dev.api.galya.io/v1/connectors \
 
 ## Set one up
 
-1. `GET /v1/connectors/registry` lists sources you can connect.
-2. `POST /v1/connectors` creates a connection for this workspace.
-3. `POST /v1/connectors/{connectorId}/test` checks the connection.
-4. `POST /v1/connectors/{connectorId}/sync` indexes items. Watch [Catalog](https://app.galya.io/catalog). The indexing strip at the top is that sync.
+1. `GET /v1/connectors/registry` lists the sources you can connect. `GET /v1/connectors/registry/{publicId}` describes one, including the settings it needs.
+2. `POST /v1/connectors` creates a connection for the workspace.
+3. `POST /v1/connectors/{connectorId}/test` checks it.
+4. `POST /v1/connectors/{connectorId}/sync` pulls products in. The sync runs in the background; watch [Catalog](https://app.galya.io/catalog).
 
-`GET /v1/connectors/requests` lists sources the workspace has asked for that are not available yet.
+`PATCH` and `DELETE /v1/connectors/{connectorId}` update or remove a connection.
 
-<Note>
-  Sync runs as a job. `GET /v1/jobs` returns status if the catalog page is still catching up.
-</Note>
+Need a source that isn't listed? `POST /v1/connectors/requests` asks for it.

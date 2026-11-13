@@ -1,45 +1,60 @@
 ---
 title: Search
-description: "Search the Galya catalog by text query or rank it relative to a person's taste, with semantic retrieval and an interactive playground for POST /v1/search."
+description: "Search the catalog by intent with POST /v1/search: keyword matches on item text and readout options, ordered by the shopper's taste."
 api: "POST /v1/search"
 ---
 
-Two shapes:
+Search a query against your catalog and order the matches for one shopper. This is the shortcut for [`POST /v1/user`](/guides/users#rank) with `rank.query`, without recording interactions.
 
-- `user_id` ranks the catalog relative to that person’s links. This is **Query taste** on [Get started](https://app.galya.io/get-started).
-- `query` runs a text search over the catalog.
+Items match by keyword (per term, case-insensitive) on their title, text and metadata. Items matching more of the query's terms come first; the shopper's taste orders items of equal match strength. A match whose readout is still being made is still returned, unscored, after the scored ones, so search never hides an exact match.
 
-Results are entities in your workspace. Open [Catalog](https://app.galya.io/catalog) to see the same items on the map.
-
-This playground posts to `https://dev.api.galya.io/v1/search`.
+<ParamField body="query" type="string" required>
+  What the shopper typed, up to 500 characters.
+</ParamField>
 
 <ParamField body="user_id" type="string">
-  Person to rank relative to. Required when `query` is omitted.
+  Order matches by this shopper's taste. Without it, matches keep their match-strength order.
 </ParamField>
 
-<ParamField body="query" type="string">
-  Text query. When set, this call searches the catalog by that text instead of by `user_id`.
+<ParamField body="schema" type="string | object" default="galya-commerce-v3">
+  The [schema](/guides/schemas) to rank through.
 </ParamField>
 
-<ParamField body="domain" type="string">
-  Limit the search to one catalog domain.
+<ParamField body="where" type="string">
+  Narrow the matches with the [`where` grammar](/guides/items#filter-the-catalog), e.g. `metadata.vendor = "Acme"`.
 </ParamField>
 
-<ParamField body="limit" type="number" default="20">
-  How many results to return.
+<ParamField body="limit" type="integer" default="20">
+  1 to 100.
 </ParamField>
 
-<ParamField body="model_id" type="string" default="cosine-rank-v1">
-  Model used when ranking relative to `user_id`. See [Models](/guides/models).
+<ParamField body="include" type="string[]">
+  `item` adds each result's title, image and metadata.
 </ParamField>
 
 <RequestExample>
 
 ```bash
-curl https://dev.api.galya.io/v1/search \
+curl https://api.galya.io/v1/search \
   -H "X-API-Key: $GALYA_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"user_demo","limit":10}'
+  -d '{"query": "black boots for work", "user_id": "shopper_1", "limit": 12, "include": ["item"]}'
 ```
 
 </RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "schema_id": "galya-commerce-v3",
+  "ranked": [
+    { "item_id": "sku_ankle_boot", "score": 0.31, "reasons": [{ "field": "color", "option": "Black", "lift": 0.22 }] }
+  ],
+  "meta": { "model_version": "galya-natural-language-commerce@2026-10", "state_source": "cache", "latency_ms": 41 }
+}
+```
+
+</ResponseExample>
+
+To rank by taste alone, with no query, use [Recommend](/guides/recommend).

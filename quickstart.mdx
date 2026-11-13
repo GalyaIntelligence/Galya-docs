@@ -1,91 +1,128 @@
 ---
 title: Quickstart
-description: "Galya API quickstart: index one catalog item, create a person, link them, and run a taste-aware search, with copyable curl requests for each step."
+description: "Galya API quickstart: upsert catalog items, wait for their readouts, record a shopper's interactions, and get a taste-ranked list with reasons, in four curl calls."
 ---
 
-This follows the checklist at [Get started](https://app.galya.io/get-started). You need a workspace that Galya has set up for you, and its workspace secret from **Copy your workspace keys**. Don't have a workspace yet? Email [hello@galya.io](mailto:hello@galya.io) about a [pilot](https://www.galya.io/pilot/).
+You need a workspace and its secret key from [API keys](https://app.galya.io/api-keys). Don't have a workspace yet? Email [hello@galya.io](mailto:hello@galya.io) about a [pilot](https://www.galya.io/pilot/).
 
 ```bash
 export GALYA_API_KEY="galya_sk_..."
 ```
 
-Examples call `https://dev.api.galya.io`. The same calls are filled in on the playground pages linked below.
+Every call below names `"schema": "galya-commerce-v3"`, the built-in fashion schema. You can [add your own questions](/guides/schemas) later.
 
-## 1. Index a catalog item
+## 1. Send items
 
-Get started calls this **Index your catalog**. One item is enough. When it arrives, the checklist marks the step done, and the item shows on [Catalog](https://app.galya.io/catalog).
+An item is one product (or video, or look): your id, a title, the text and image the model reads, and any metadata you want back. Up to 100 per call.
 
 ```bash
-curl https://dev.api.galya.io/v1/index \
+curl https://api.galya.io/v1/item \
   -H "X-API-Key: $GALYA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "entity_id": "sku_crew",
-    "type": "product",
-    "name": "Weightless merino crew",
-    "content": "Lightweight merino crewneck for everyday wear.",
-    "kind": "text"
+    "schema": "galya-commerce-v3",
+    "items": [
+      {
+        "id": "sku_wrap_dress",
+        "title": "Black wrap midi dress",
+        "text": "Wrap silhouette, crepe, midi length.",
+        "image_url": "https://cdn.example.com/wrap-dress.jpg",
+        "metadata": { "product_id": "1001", "price": 129 }
+      },
+      {
+        "id": "sku_ankle_boot",
+        "title": "Leather ankle boot",
+        "image_url": "https://cdn.example.com/ankle-boot.jpg",
+        "metadata": { "product_id": "1002", "price": 189 }
+      }
+    ]
   }'
 ```
 
-<Card title="Index playground" icon="play" href="/guides/index">
-  Send this body from the docs. It posts to the development API.
-</Card>
+The call returns `202` right away. The model reads each item in the background:
 
-## 2. Create a person
+```json
+{
+  "schema_id": "galya-commerce-v3",
+  "items": [
+    { "id": "sku_wrap_dress", "status": "pending" },
+    { "id": "sku_ankle_boot", "status": "pending" }
+  ]
+}
+```
 
-Get started calls this **Create a user and build their taste**. People you create show on [People](https://app.galya.io/people).
+## 2. Wait for readouts
+
+A readout usually lands within half a minute. List what is still pending:
 
 ```bash
-curl https://dev.api.galya.io/v1/entity \
+curl "https://api.galya.io/v1/item?schema=galya-commerce-v3&status=pending" \
+  -H "X-API-Key: $GALYA_API_KEY"
+```
+
+When the list is empty, every item is `ready`. To see what the model read for one item — a probability per option for each field, such as `color`, `silhouette` and `product_family` — fetch it:
+
+```bash
+curl "https://api.galya.io/v1/item/sku_wrap_dress?schema=galya-commerce-v3" \
+  -H "X-API-Key: $GALYA_API_KEY"
+```
+
+## 3. Record interactions and rank, in one call
+
+`POST /v1/user` takes a shopper's interactions and a ranking request together. Interactions are applied before the ranking, so the result already reflects them. Tags are plain language.
+
+```bash
+curl https://api.galya.io/v1/user \
   -H "X-API-Key: $GALYA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "entity_id": "user_demo",
-    "type": "user",
-    "name": "Demo user"
+    "user_id": "shopper_1",
+    "schema": "galya-commerce-v3",
+    "interactions": [
+      { "id": "evt_1", "item_id": "sku_wrap_dress", "tag": "liked" }
+    ],
+    "rank": { "limit": 10 },
+    "include": ["taste"]
   }'
 ```
 
-<Card title="Entity playground" icon="user" href="/guides/entities">
-  Create the person without indexing content.
-</Card>
+```json
+{
+  "user_id": "shopper_1",
+  "schema_id": "galya-commerce-v3",
+  "interactions": [
+    { "id": "evt_1", "item_id": "sku_wrap_dress", "tag": "liked", "read_as": "like", "status": "recorded" }
+  ],
+  "ranked": [
+    { "item_id": "sku_ankle_boot", "score": 0.21, "reasons": [{ "field": "color", "option": "Black", "lift": 0.18 }] }
+  ],
+  "taste": { "summary": "Black, Wrap, Midi", "evidence": 1, "fields": [] },
+  "meta": { "model_version": "galya-natural-language-commerce@2026-10", "state_source": "model" }
+}
+```
 
-## 3. Link them
+`rank` with no `item_ids` recommends from the whole catalog. Pass `item_ids` to rerank your own list, or `query` to search.
 
-The link says the person is about that catalog item. That is the taste history queries use.
+## 4. Rerank a page
+
+Most storefronts already have a list to show: a collection page, search results, a carousel. Send it as `item_ids` and render the order Galya returns:
 
 ```bash
-curl https://dev.api.galya.io/v1/entity/user_demo/link \
+curl https://api.galya.io/v1/user \
   -H "X-API-Key: $GALYA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "entity_id": "sku_crew",
-    "relation": "about",
-    "weight": 1
+    "user_id": "shopper_1",
+    "schema": "galya-commerce-v3",
+    "rank": { "item_ids": ["sku_ankle_boot", "sku_wrap_dress"], "limit": 2 }
   }'
 ```
 
-<Card title="Link playground" icon="link" href="/guides/link">
-  Attach the catalog item to the person.
-</Card>
-
-## 4. Query taste
-
-Get started calls this **Query taste**. Search the catalog for that person, or recommend items of a type.
-
-```bash
-curl https://dev.api.galya.io/v1/search \
-  -H "X-API-Key: $GALYA_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "user_demo",
-    "limit": 10
-  }'
-```
-
-<Card title="Search playground" icon="search" href="/guides/search">
-  Rank the catalog relative to the person you just linked.
-</Card>
-
-Then open [Overview](https://app.galya.io) to see taste regions for the workspace, and [Catalog](https://app.galya.io/catalog) for the item you indexed.
+<CardGroup cols={2}>
+  <Card title="Items" icon="box" href="/guides/items">
+    Upserts, readouts, filtering with `where`, deletes.
+  </Card>
+  <Card title="Users" icon="user" href="/guides/users">
+    Interaction tags, idempotency, anonymous-to-signed-in merges, privacy.
+  </Card>
+</CardGroup>
