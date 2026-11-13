@@ -13,7 +13,7 @@ info:
     An account key (`galya_ak_...`) also works together with `X-Galya-Workspace-Id`.
 
 
-    **One model.** Every call runs on `galya-natural-language-commerce`. There is nothing to choose;
+    **One model.** Every call runs on the same Galya model. There is nothing to choose;
 
     model upgrades ship behind the same API and `meta.model_version` reports which one answered.
 
@@ -454,7 +454,6 @@ paths:
                   score: 0.05
                   reasons: []
                 meta:
-                  model_version: galya-natural-language-commerce@2026-10
                   state_source: model
                   latency_ms: 38
         '400':
@@ -1408,7 +1407,6 @@ components:
         model_version:
           type: string
           description: Which release of the Galya model answered. Informational; there is nothing to select.
-          example: galya-natural-language-commerce@2026-10
         state_source:
           type: string
           enum:
