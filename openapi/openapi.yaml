@@ -101,7 +101,7 @@ paths:
               $ref: '#/components/schemas/ItemUpsertRequest'
             examples:
               products:
-                summary: Two products, read with the built-in trained schema
+                summary: Two apparel products, read with galya-commerce-v3
                 value:
                   schema: galya-commerce-v3
                   items:
@@ -371,13 +371,11 @@ paths:
         Interactions do not depend on a schema: they are stored once, and taste is computed per\nschema\
         \ at query time from the readouts of the interacted items. So the same history can be\nread through\
         \ any number of schemas. Items with no readout for the call's schema yet are\nqueued for one and\
-        \ listed in `not_ranked` (`pending`). The model's own taste correction\ncovers the trained `galya-commerce-v3`\
-        \ fields; custom question fields (`q:<id>`) rank\nthrough the pooled taste.\n\nInteractions recorded\
-        \ in a call are applied before that call's ranking. A shopper with no\ninteractions gets `score:\
-        \ 0` for every item; results then keep the order of `item_ids`\n(or catalog order), so callers\
-        \ can always render them.\n\nTaste is looked up from the model at query time and cached per interaction\
-        \ history; if the\nmodel is unavailable the pooled taste is used and `meta.state_source` says\
-        \ so.\n"
+        \ listed in `not_ranked` (`pending`).\n\nInteractions recorded in a call are applied before that\
+        \ call's ranking. A shopper with no\ninteractions gets `score: 0` for every item; results then\
+        \ keep the order of `item_ids`\n(or catalog order), so callers can always render them.\n\nTaste\
+        \ is looked up from the model at query time and cached per interaction history; if the\nmodel\
+        \ is unavailable the pooled taste is used and `meta.state_source` says so.\n"
       security:
       - WorkspaceApiKey: []
       - WorkspaceBearer: []
@@ -611,7 +609,7 @@ paths:
       tags:
       - schema
       operationId: listSchemas
-      summary: List the workspace's schemas and the built-in ones
+      summary: List the schemas this workspace can use
       security:
       - WorkspaceApiKey: []
       - WorkspaceBearer: []
@@ -638,8 +636,7 @@ paths:
           $ref: '#/components/responses/MissingOrInvalidApiKey'
       x-mint:
         metadata:
-          description: List the workspace's schemas and the built-in ones. GET /v1/schemas in the Galya
-            API reference.
+          description: List the schemas this workspace can use. GET /v1/schemas in the Galya API reference.
           noindex: true
   /v1/schemas/{schemaId}:
     parameters:
@@ -674,7 +671,7 @@ paths:
       - schema
       operationId: deleteSchema
       summary: Delete a schema and every readout made with it
-      description: Built-in schemas cannot be deleted (`400`). Interactions are untouched.
+      description: '`galya-commerce-v3` cannot be deleted (`400`). Interactions are untouched.'
       security:
       - WorkspaceApiKey: []
       - WorkspaceBearer: []
@@ -689,8 +686,8 @@ paths:
           $ref: '#/components/responses/NotFound'
       x-mint:
         metadata:
-          description: Delete a schema and every readout made with it. Built-in schemas cannot be deleted
-            (400). Interactions are untouched. DELETE /v1/schemas/{schemaId} in the...
+          description: Delete a schema and every readout made with it. galya-commerce-v3 cannot be deleted
+            (400). Interactions are untouched. DELETE /v1/schemas/{schemaId} in...
           noindex: true
   /v1/connectors/registry:
     get:
@@ -1448,11 +1445,12 @@ components:
         '
     Readout:
       type: object
-      description: 'Field id -> option -> probability. Trained fields use the v3 schema ids (`color`,
+      description: 'Field id -> option -> probability. Questions you write appear as `q:<id>`; `galya-commerce-v3`
+        uses
 
-        `product_family`, …); custom questions appear as `q:<id>`. When supplied on input, a single
+        plain ids (`color`, `product_family`, …). When supplied on input, a single option string (`"Dress"`)
 
-        option string (`"Dress"`) or a `{option: p}` map is accepted per field and normalised.
+        or a `{option: p}` map is accepted per field and normalised.
 
         '
       additionalProperties:
@@ -2002,17 +2000,13 @@ components:
           - string
           - 'null'
           default: galya-commerce-v3
-          description: 'Built-in trained schema to include (`galya-commerce-v3`: 219 fashion fields, the
-            only
-
-            fields the model''s own taste correction covers). `null` = only `questions`.
-
-            '
+          description: Another schema whose fields to include as well (e.g. `galya-commerce-v3`). `null`
+            = only `questions`.
           example: galya-commerce-v3
         questions:
           type: array
           maxItems: 64
-          description: Custom questions, answered per item as fields `q:<id>` (zero-shot; accuracy unmeasured).
+          description: The prompt — your questions, answered per item as fields `q:<id>`.
           items:
             $ref: '#/components/schemas/TasteQuestion'
     Schema:
@@ -2027,7 +2021,7 @@ components:
         properties:
           id:
             type: string
-            description: '`galya-commerce-v3` for built-ins, else `sch_` + a hash of `base` and `questions`.'
+            description: '`galya-commerce-v3`, or `sch_` + a hash of `base` and `questions`.'
             example: sch_9b1f2e7c4a
           builtin:
             type: boolean

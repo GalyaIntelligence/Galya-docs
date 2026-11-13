@@ -17,7 +17,7 @@ The API is at `https://api.galya.io`. The interactive examples in these docs cal
 | --- | --- | --- |
 | [Item](/guides/items) | One thing you sell or show: a product, a video, a look. Its text, image and your metadata. | `POST /v1/item` |
 | [User](/guides/users) | One shopper: their interactions with items, their taste, and every ranking for them. | `POST /v1/user` |
-| [Schema](/guides/schemas) | The questions the model answers about each item: the built-in fashion schema, your own questions, or both. | `GET /v1/schemas` |
+| [Schema](/guides/schemas) | The questions the model answers about each item: a [default schema](/guides/schema-library) for your domain, your own questions, or both. | `GET /v1/schemas` |
 
 `POST /v1/search`, `POST /v1/rerank` and `POST /v1/recommend` are shortcuts for the common ranking intents. [Agentic search](/guides/agentic-search) lets outside AI agents query your catalog under a policy you set.
 

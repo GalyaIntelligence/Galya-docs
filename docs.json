@@ -41,7 +41,7 @@
           },
           {
             "group": "Catalog",
-            "pages": ["guides/items", "guides/schemas"]
+            "pages": ["guides/items", "guides/schemas", "guides/schema-library"]
           },
           {
             "group": "Shoppers",
