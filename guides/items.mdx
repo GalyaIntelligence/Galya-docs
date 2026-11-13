@@ -4,7 +4,7 @@ description: "Send your catalog to Galya with POST /v1/item: upsert products wit
 api: "POST /v1/item"
 ---
 
-An item is one thing you sell or show: a product, a variant, a video, a look. Send its text and image and Galya's model reads it into a [readout](/concepts/readouts) for the call's schema. That readout is what ranking, search and filtering use.
+An item is one thing you sell or show: a product, a variant, a video, a look. Send its text and image and Galya's model reads it into a [readout](/concepts/taste-schemas) for the call's schema. That readout is what ranking, search and filtering use.
 
 <ParamField body="schema" type="string | object" required>
   A schema id (`galya-commerce-v3`, `sch_...`) or an inline [schema definition](/guides/schemas). The response's `schema_id` is the id it resolved to.
