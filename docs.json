@@ -73,7 +73,12 @@
         "label": "Dashboard",
         "href": "https://app.galya.io"
       }
-    ]
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Request access",
+      "href": "https://www.galya.io/pilot/"
+    }
   },
   "footer": {
     "socials": {

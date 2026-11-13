@@ -15,3 +15,15 @@ jobs:
         run: |
           chmod +x scripts/validate-mintlify-speakeasy-openapi.sh
           CI_VALIDATE_DOCS_JSON_ONLY=true ./scripts/validate-mintlify-speakeasy-openapi.sh
+      - name: Committed OpenAPI exposes customer-facing endpoints only
+        run: |
+          python3 -m pip install --quiet pyyaml
+          cp openapi/openapi.yaml /tmp/openapi.committed.yaml
+          python3 scripts/filter-public-openapi.py openapi/openapi.yaml
+          python3 - <<'PY'
+          import yaml
+          a = yaml.safe_load(open("/tmp/openapi.committed.yaml"))
+          b = yaml.safe_load(open("openapi/openapi.yaml"))
+          if set(a["paths"]) != set(b["paths"]):
+              raise SystemExit("openapi/openapi.yaml has non-public paths; run scripts/filter-public-openapi.py")
+          PY

@@ -1,0 +1,18 @@
+# Retires docs.galya.io: 301s every path to https://galya.io/docs and marks
+# the host noindex. Deploy: cd cloudflare/docs-subdomain-redirect && npx wrangler deploy
+# The custom_domain route creates the proxied DNS record and certificate.
+
+name = "galya-docs-subdomain-redirect"
+main = "src/worker.js"
+compatibility_date = "2024-09-23"
+workers_dev = false
+
+[vars]
+TARGET_ORIGIN = "https://galya.io"
+MINTLIFY_SUBDOMAIN = "galya.mintlify.site"
+LANDING_PATH = "/docs/introduction"
+ROBOTS_DISALLOW_ALL = "false"
+
+[[routes]]
+pattern = "docs.galya.io"
+custom_domain = true

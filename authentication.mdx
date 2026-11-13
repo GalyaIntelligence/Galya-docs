@@ -1,6 +1,6 @@
 ---
 title: Authentication
-description: Workspace, account, and agent keys, and where to copy them in the dashboard.
+description: "How Galya API keys work: workspace secret, publishable, account, and agent keys, the headers to send, and where your provisioned keys live in the dashboard."
 ---
 
 Send a key on every API call except public metadata:
@@ -10,9 +10,13 @@ Send a key on every API call except public metadata:
 
 The playground on these docs asks for that header. Paste a workspace secret. Requests go to `https://dev.api.galya.io`.
 
+<Note>
+  Keys are issued when Galya provisions your workspace. There is no self-serve sign-up. If you don't have a workspace yet, email [hello@galya.io](mailto:hello@galya.io) about a [pilot](https://www.galya.io/pilot/).
+</Note>
+
 ## Keys
 
-| Key | Prefix | Use it for | Where to copy it |
+| Key | Prefix | Use it for | Where to find it |
 | --- | --- | --- | --- |
 | Workspace secret | `galya_sk_` | Server calls for one workspace | [API keys](https://app.galya.io/api-keys), or Get started → **Copy your workspace keys** |
 | Workspace publishable | `galya_pk_` | Browser use. It identifies the workspace and is not a server secret. | [API keys](https://app.galya.io/api-keys) |
