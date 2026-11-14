@@ -61,7 +61,7 @@ paths:
         the index.
 
 
-        Every call names a **`schema`**: a schema id (`galya-commerce-v3`, `sch_…`) or an inline
+        Every call names a **`schema`**: a schema id (`fashion`, `watches`, `sch_…`) or an inline
 
         definition, which is stored and answered with its content-addressed id (`schema_id`). Items
 
@@ -97,9 +97,9 @@ paths:
               $ref: '#/components/schemas/ItemUpsertRequest'
             examples:
               products:
-                summary: Two apparel products, read with galya-commerce-v3
+                summary: Two apparel products, read with the fashion schema
                 value:
-                  schema: galya-commerce-v3
+                  schema: fashion
                   items:
                   - id: gid_8123
                     title: Black wrap midi dress
@@ -117,7 +117,7 @@ paths:
                 value:
                   schema:
                     name: occasion-and-fit
-                    base: galya-commerce-v3
+                    base: fashion
                     questions:
                     - id: occasion
                       text: What occasion is this product for?
@@ -155,7 +155,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ItemUpsertResponse'
               example:
-                schema_id: galya-commerce-v3
+                schema_id: fashion
                 job_id: job_01JD4X
                 items:
                 - id: gid_8123
@@ -198,7 +198,7 @@ paths:
           when any of them is used.
         schema:
           type: string
-          example: galya-commerce-v3
+          example: fashion
       - name: where
         in: query
         schema:
@@ -268,7 +268,7 @@ paths:
         in: query
         schema:
           type: string
-          example: galya-commerce-v3
+          example: fashion
       responses:
         '200':
           description: The item
@@ -380,7 +380,7 @@ paths:
                 summary: Pixel — record interactions only
                 value:
                   user_id: shop_client_9f2c
-                  schema: galya-commerce-v3
+                  schema: fashion
                   interactions:
                   - id: evt_1
                     item_id: gid_8123
@@ -399,7 +399,7 @@ paths:
                 summary: Rerank a collection page
                 value:
                   user_id: shop_client_9f2c
-                  schema: galya-commerce-v3
+                  schema: fashion
                   rank:
                     item_ids:
                     - gid_8123
@@ -425,7 +425,7 @@ paths:
                 $ref: '#/components/schemas/UserResponse'
               example:
                 user_id: shop_client_9f2c
-                schema_id: galya-commerce-v3
+                schema_id: fashion
                 interactions:
                 - id: evt_2
                   item_id: gid_8123
@@ -478,7 +478,7 @@ paths:
         description: Schema id the taste is expressed in.
         schema:
           type: string
-          example: galya-commerce-v3
+          example: fashion
       - name: include
         in: query
         description: Comma-separated. `interactions` adds the most recent interactions.
@@ -556,7 +556,7 @@ paths:
               $ref: '#/components/schemas/SchemaDefinition'
             example:
               name: occasion-and-fit
-              base: galya-commerce-v3
+              base: fashion
               questions:
               - id: occasion
                 text: What occasion is this product for?
@@ -658,7 +658,8 @@ paths:
       - schema
       operationId: deleteSchema
       summary: Delete a schema and every readout made with it
-      description: '`galya-commerce-v3` cannot be deleted (`400`). Interactions are untouched.'
+      description: Built-in schemas (fashion, travel, hospitality, tech, watches, tradingcards, videogames)
+        cannot be deleted (`400`). Interactions are untouched.
       security:
       - WorkspaceApiKey: []
       - WorkspaceBearer: []
@@ -673,8 +674,8 @@ paths:
           $ref: '#/components/responses/NotFound'
       x-mint:
         metadata:
-          description: Delete a schema and every readout made with it. galya-commerce-v3 cannot be deleted
-            (400). Interactions are untouched. DELETE /v1/schemas/{schemaId} in...
+          description: Delete a schema and every readout made with it. Built-in schemas (fashion, travel,
+            hospitality, tech, watches, tradingcards, videogames) cannot be deleted...
           noindex: true
   /v1/search:
     post:
@@ -706,7 +707,7 @@ paths:
             schema:
               $ref: '#/components/schemas/SearchRequest'
             example:
-              schema: galya-commerce-v3
+              schema: fashion
               query: black boots for work
               user_id: shop_client_9f2c
               limit: 12
@@ -910,7 +911,7 @@ components:
         '
     Readout:
       type: object
-      description: 'Field id -> option -> probability. Questions you write appear as `q:<id>`; `galya-commerce-v3`
+      description: 'Field id -> option -> probability. Questions you write appear as `q:<id>`; `fashion`
         uses
 
         plain ids (`color`, `product_family`, …). When supplied on input, a single option string (`"Dress"`)
@@ -934,16 +935,18 @@ components:
           Dress: 0.97
           Skirt: 0.03
     SchemaRef:
-      description: 'The schema a call reads items and taste through: a schema id (`galya-commerce-v3`,
+      description: 'The schema a call reads items and taste through: a schema id (a built-in such as `fashion`
+        or
 
-        `sch_…`), or an inline `SchemaDefinition` from your code, which is stored and resolved to
+        `watches`, or a stored `sch_…`), or an inline `SchemaDefinition` from your code, which is stored
+        and
 
-        its content-addressed id (returned as `schema_id`).
+        resolved to its content-addressed id (returned as `schema_id`).
 
         '
       oneOf:
       - type: string
-        example: galya-commerce-v3
+        example: fashion
       - $ref: '#/components/schemas/SchemaDefinition'
     ItemReadout:
       type: object
@@ -1463,10 +1466,10 @@ components:
           type:
           - string
           - 'null'
-          default: galya-commerce-v3
-          description: Another schema whose fields to include as well (e.g. `galya-commerce-v3`). `null`
-            = only `questions`.
-          example: galya-commerce-v3
+          default: fashion
+          description: Another schema whose fields to include as well (e.g. `fashion`). `null` = only
+            `questions`.
+          example: fashion
         questions:
           type: array
           maxItems: 64
@@ -1485,7 +1488,8 @@ components:
         properties:
           id:
             type: string
-            description: '`galya-commerce-v3`, or `sch_` + a hash of `base` and `questions`.'
+            description: A built-in id (`fashion`, `travel`, `hospitality`, `tech`, `watches`, `tradingcards`,
+              `videogames`), or `sch_` + a hash of `base` and `questions`.
             example: sch_9b1f2e7c4a
           builtin:
             type: boolean
@@ -1540,7 +1544,7 @@ components:
         schema:
           allOf:
           - $ref: '#/components/schemas/SchemaRef'
-          description: Defaults to `galya-commerce-v3`.
+          description: Defaults to `fashion`.
         user_id:
           type: string
           description: Order matches of equal strength by this user's taste.

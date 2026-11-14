@@ -59,7 +59,7 @@ curl https://api.galya.io/v1/user \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "shopper_1",
-    "schema": "galya-commerce-v3",
+    "schema": "fashion",
     "interactions": [
       { "id": "evt_1", "item_id": "sku_wrap_dress", "tag": "viewed", "dwell_ms": 12000, "context": { "surface": "collection" } },
       { "id": "evt_2", "item_id": "sku_wrap_dress", "tag": "added to bag" }
@@ -76,7 +76,7 @@ curl https://api.galya.io/v1/user \
 ```json 200
 {
   "user_id": "shopper_1",
-  "schema_id": "galya-commerce-v3",
+  "schema_id": "fashion",
   "interactions": [
     { "id": "evt_1", "item_id": "sku_wrap_dress", "tag": "viewed", "read_as": "dwell", "status": "recorded" },
     { "id": "evt_2", "item_id": "sku_wrap_dress", "tag": "added to bag", "read_as": "add_to_bag", "status": "recorded" }
@@ -137,7 +137,7 @@ Items that can't be scored are listed under `not_ranked`: `not_found` for unknow
 Read it without recording or ranking anything:
 
 ```bash
-curl "https://api.galya.io/v1/user/shopper_1?schema=galya-commerce-v3&include=interactions" \
+curl "https://api.galya.io/v1/user/shopper_1?schema=fashion&include=interactions" \
   -H "X-API-Key: $GALYA_API_KEY"
 ```
 
@@ -148,7 +148,7 @@ curl "https://api.galya.io/v1/user/shopper_1?schema=galya-commerce-v3&include=in
 Track a visitor under an anonymous id, then pass it in `merge_from` on the first call with their account id. Their history moves over and counts toward the signed-in user.
 
 ```json
-{ "user_id": "customer_8812", "merge_from": ["anon_5f2c"], "schema": "galya-commerce-v3" }
+{ "user_id": "customer_8812", "merge_from": ["anon_5f2c"], "schema": "fashion" }
 ```
 
 ## Erase a user

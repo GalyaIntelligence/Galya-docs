@@ -16,7 +16,7 @@ The best matches for the query come first, and the shopper's taste orders them. 
   Order matches by this shopper's taste. Without it, matches keep their match-strength order.
 </ParamField>
 
-<ParamField body="schema" type="string | object" default="galya-commerce-v3">
+<ParamField body="schema" type="string | object" default="fashion">
   The [schema](/guides/schemas) to rank through.
 </ParamField>
 
@@ -47,7 +47,7 @@ curl https://api.galya.io/v1/search \
 
 ```json 200
 {
-  "schema_id": "galya-commerce-v3",
+  "schema_id": "fashion",
   "ranked": [
     { "item_id": "sku_ankle_boot", "score": 0.31, "reasons": [{ "field": "color", "option": "Black", "lift": 0.22 }] }
   ],

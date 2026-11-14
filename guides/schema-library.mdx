@@ -1,44 +1,46 @@
 ---
 title: Schema library
-description: "Default Galya schemas for fashion, travel, hospitality, tech, watches, trading cards and video games. Use one as-is or adapt it: a schema is a prompt the model answers for every item."
+description: "Galya's default schemas, one per domain: fashion, travel, hospitality, tech, watches, tradingcards and videogames. Use one by id, or adapt its questions."
 ---
 
 The model is promptable. A [schema](/guides/schemas) is the prompt: a set of questions, each with its options, that the model answers for every item from its image and text. Change the questions and you change what Galya reads and ranks on, in any domain.
 
-These default schemas cover common domains. Use one as-is, add your own questions (up to 64), or edit the options. Each edit makes a new content-addressed schema, and the old one keeps working.
+These default schemas are built in: use one by its id. To adapt one, copy its questions into your own definition, add your own (up to 64), or edit the options.
 
-| Domain | For | Schema |
+| Domain | For | Schema id |
 | --- | --- | --- |
-| [Fashion and apparel](#fashion-and-apparel) | Clothing, shoes, bags, accessories | `galya-commerce-v3` |
-| [Travel](#travel) | Destinations, tours, packages, experiences | [`travel`](#travel) |
-| [Hospitality](#hospitality) | Hotels, rentals, restaurants | [`hospitality`](#hospitality) |
-| [Tech and electronics](#tech-and-electronics) | Phones, laptops, audio, wearables, smart home | [`tech`](#tech-and-electronics) |
-| [Watches](#watches) | Mechanical, quartz and smart watches | [`watches`](#watches) |
-| [Trading cards](#trading-cards) | Singles, sealed product, graded slabs | [`trading-cards`](#trading-cards) |
-| [Video games](#video-games) | Games, DLC, bundles | [`video-games`](#video-games) |
-
-Send a schema by id, or send its definition inline on any item or user call. Galya stores an inline definition the first time and returns its id as `schema_id`:
+| [Fashion and apparel](#fashion-and-apparel) | Clothing, shoes, bags, accessories | `fashion` |
+| [Travel](#travel) | Destinations, tours, packages, experiences | `travel` |
+| [Hospitality](#hospitality) | Hotels, rentals, restaurants | `hospitality` |
+| [Tech and electronics](#tech-and-electronics) | Phones, laptops, audio, wearables, smart home | `tech` |
+| [Watches](#watches) | Mechanical, quartz and smart watches | `watches` |
+| [Trading cards](#trading-cards) | Singles, sealed product, graded slabs | `tradingcards` |
+| [Video games](#video-games) | Games, DLC, bundles | `videogames` |
 
 ```bash
 curl https://api.galya.io/v1/item \
   -H "X-API-Key: $GALYA_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{ "schema": { "name": "watches", "base": null, "questions": [ ... ] }, "items": [ ... ] }'
+  -d '{ "schema": "watches", "items": [ ... ] }'
 ```
 
 ## Fashion and apparel
 
-Clothing, shoes, bags, accessories. Send it by id. Its 219 fields include `color`, `product_family`, `pattern` and `silhouette`.
+Clothing, shoes, bags, accessories. Readout fields (a sample): `product_family`, `color`, `pattern`, `silhouette`, `occasion`, `fabric_look`, `color_boldness`, `garment_role`, and more.
 
 ```json
-{ "schema": "galya-commerce-v3" }
+{ "schema": "fashion" }
 ```
 
 ## Travel
 
 Destinations, tours, packages, experiences. Readout fields: `q:trip_type`, `q:pace`, `q:budget`, `q:climate`, `q:traveler`, `q:duration`.
 
-<Accordion title="Definition">
+```json
+{ "schema": "travel" }
+```
+
+<Accordion title="Questions">
 
 ```json
 {
@@ -120,7 +122,11 @@ Destinations, tours, packages, experiences. Readout fields: `q:trip_type`, `q:pa
 
 Hotels, rentals, restaurants. Readout fields: `q:property_style`, `q:atmosphere`, `q:price_tier`, `q:setting`, `q:highlight`.
 
-<Accordion title="Definition">
+```json
+{ "schema": "hospitality" }
+```
+
+<Accordion title="Questions">
 
 ```json
 {
@@ -194,7 +200,11 @@ Hotels, rentals, restaurants. Readout fields: `q:property_style`, `q:atmosphere`
 
 Phones, laptops, audio, wearables, smart home. Readout fields: `q:category`, `q:user_level`, `q:price_tier`, `q:design`, `q:priority`.
 
-<Accordion title="Definition">
+```json
+{ "schema": "tech" }
+```
+
+<Accordion title="Questions">
 
 ```json
 {
@@ -267,7 +277,11 @@ Phones, laptops, audio, wearables, smart home. Readout fields: `q:category`, `q:
 
 Mechanical, quartz and smart watches. Readout fields: `q:watch_style`, `q:movement`, `q:case_material`, `q:dial_color`, `q:case_size`, `q:price_tier`.
 
-<Accordion title="Definition">
+```json
+{ "schema": "watches" }
+```
+
+<Accordion title="Questions">
 
 ```json
 {
@@ -352,11 +366,15 @@ Mechanical, quartz and smart watches. Readout fields: `q:watch_style`, `q:moveme
 
 Singles, sealed product, graded slabs. Readout fields: `q:game`, `q:product_kind`, `q:rarity`, `q:condition`, `q:appeal`, `q:era`.
 
-<Accordion title="Definition">
+```json
+{ "schema": "tradingcards" }
+```
+
+<Accordion title="Questions">
 
 ```json
 {
-  "name": "trading-cards",
+  "name": "tradingcards",
   "base": null,
   "questions": [
     {
@@ -433,11 +451,15 @@ Singles, sealed product, graded slabs. Readout fields: `q:game`, `q:product_kind
 
 Games, DLC, bundles. Readout fields: `q:genre`, `q:play_mode`, `q:session_length`, `q:art_style`, `q:tone`, `q:difficulty`.
 
-<Accordion title="Definition">
+```json
+{ "schema": "videogames" }
+```
+
+<Accordion title="Questions">
 
 ```json
 {
-  "name": "video-games",
+  "name": "videogames",
   "base": null,
   "questions": [
     {
