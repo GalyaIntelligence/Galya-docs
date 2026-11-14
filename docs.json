@@ -40,6 +40,10 @@
             "pages": ["concepts/taste-schemas"]
           },
           {
+            "group": "Guides",
+            "pages": ["guides/sync-catalog", "guides/record-interactions", "guides/predict-taste"]
+          },
+          {
             "group": "Catalog",
             "pages": ["guides/items", "guides/schemas", "guides/schema-library"]
           },

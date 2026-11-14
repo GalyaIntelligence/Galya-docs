@@ -1,9 +1,17 @@
 ---
 title: Introduction
-description: "Galya API overview: send your catalog as items, record what shoppers do, and rank, search and recommend by taste with one promptable model."
+description: "Galya is a predictive taste model, trained to predict preference dynamics over your own view of your content. It works on any catalog without training, and ranks every surface for each shopper in real time, with the reasons why."
 ---
 
-Galya ranks a catalog for each shopper by taste. You send it two things — your **items** and what each **user** does with them — and ask it to rank, search or recommend. One model does the reading and the ranking. There is nothing to train, tune or choose.
+Galya is a predictive taste model. It is trained to predict preference dynamics — how what someone wants forms and shifts with each thing they see, like or skip — over the view of your content that you specify. You describe that view in plain language as a [schema](/guides/schemas); the model reads your catalog through it and predicts each shopper's taste in those same terms. It works universally, on any catalog and any schema, without training.
+
+**It understands your catalog.** Send your items and Galya reads every image and description, answering the questions you care about — *What occasion is this for? How does it fit? Diver or dress watch?* Your catalog becomes clear, filterable attributes instead of a pile of SKUs.
+
+**It makes preference legible.** Tell it what each shopper does, in plain words like `"liked"` or `"added to bag"`, and Galya turns that history into a taste profile anyone can read: *black, minimal, work-ready; divers over dress watches.*
+
+**It acts on it in real time.** Rerank a collection page, answer a search with intent, or recommend from the whole catalog. Each result is ranked by how well it fits that shopper and comes back with the reasons why. Every interaction updates their taste in the same call, and the same taste works everywhere you reach them: your site, search, email, ads or an AI agent.
+
+No embeddings to build, no model to train, no ranking rules to maintain. You specify the view; the predictive taste model does the rest.
 
 <Note>
   Galya sets up each workspace as part of a [pilot](https://www.galya.io/pilot/). There is no self-serve sign-up. To get access, [book a call](https://calendar.app.google/Cvsq8qoEaoAiJEQ48). Once your workspace is live, your keys are on the dashboard.
@@ -24,7 +32,7 @@ The API is at `https://api.galya.io`. The interactive examples in these docs cal
 ## How it works
 
 1. **Items are read once.** When you upsert an item, the model reads its image and text and answers every question in the schema with a probability per option. That answer is the item's [readout](/concepts/taste-schemas). It is the index: there are no embeddings to manage.
-2. **Interactions are plain language.** Record what a shopper did with an item as a tag — `"liked"`, `"added to bag"`, `"watched 12s"`. Galya weights them and keeps the raw text.
+2. **Interactions are plain language.** Record what a shopper did with an item as a tag — `"liked"`, `"added to bag"`, `"watched 12s"`. Galya understands them and keeps the raw text.
 3. **Taste is computed at query time** from the readouts of the items a shopper interacted with, through whichever schema the call names. The same history works for any number of schemas.
 4. **Every ranked item says why.** Results carry `reasons`: the readout fields and options that lifted the item for this shopper.
 
