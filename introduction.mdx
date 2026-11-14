@@ -32,7 +32,7 @@ The API is at `https://api.galya.io`. The interactive examples in these docs cal
 ## How it works
 
 1. **Items are read once.** When you upsert an item, the model reads its image and text and answers every question in the schema with a probability per option. That answer is the item's [readout](/concepts/taste-schemas). It is the index: there are no embeddings to manage.
-2. **Interactions are plain language.** Record what a shopper did with an item as a tag — `"liked"`, `"added to bag"`, `"watched 12s"`. Galya weights them and keeps the raw text.
+2. **Interactions are plain language.** Record what a shopper did with an item as a tag — `"liked"`, `"added to bag"`, `"watched 12s"`. Galya understands them and keeps the raw text.
 3. **Taste is computed at query time** from the readouts of the items a shopper interacted with, through whichever schema the call names. The same history works for any number of schemas.
 4. **Every ranked item says why.** Results carry `reasons`: the readout fields and options that lifted the item for this shopper.
 

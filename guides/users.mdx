@@ -95,15 +95,15 @@ curl https://api.galya.io/v1/user \
 
 ## Interactions
 
-Tags are plain language. Galya reads each one as a known signal, returned as `read_as`, and keeps your text:
+Tags are plain language: write what happened, the way you would say it. Galya keeps your text and tells you how it understood each one as `read_as`:
 
-| `read_as` | Example tags | Effect on taste |
-| --- | --- | --- |
-| `like`, `save` | liked, saved, wishlisted | Toward the item |
-| `add_to_bag`, `purchase` | added to bag, bought | Strongly toward the item |
-| `dwell` | viewed, with `dwell_ms` | Toward the item, more for longer looks |
-| `skip`, `unlike`, `unsave` | skipped, unliked | Away from the item |
-| `view`, `impression`, `other` | viewed without dwell, shown, anything else | Stored; no effect on taste yet |
+| `read_as` | Example tags |
+| --- | --- |
+| `like`, `save` | liked, saved, wishlisted |
+| `add_to_bag`, `purchase` | added to bag, bought |
+| `dwell` | viewed, with `dwell_ms` |
+| `skip`, `unlike`, `unsave` | skipped, unliked |
+| `view`, `impression`, `other` | viewed, shown, anything else |
 
 Each interaction comes back with a `status`:
 
@@ -132,7 +132,7 @@ Items that can't be scored are listed under `not_ranked`: `not_found` for unknow
 
 ## Taste
 
-`include: ["taste"]` returns the shopper's taste through the call's schema: per field the top options with `p` and `lift` (how much more than the catalog baseline, 1 = no preference), an overall `evidence` (0 = no history yet), and a one-line `summary`.
+`include: ["taste"]` returns the shopper's taste through the call's schema: per field the options they lean toward (with `p` and how strongly, `lift`), an overall `evidence` (0 = no history yet), and a one-line `summary` you can show as-is.
 
 Read it without recording or ranking anything:
 
@@ -141,7 +141,7 @@ curl "https://api.galya.io/v1/user/shopper_1?schema=galya-commerce-v3&include=in
   -H "X-API-Key: $GALYA_API_KEY"
 ```
 
-`meta.state_source` says how taste was computed for the call: `model` (fresh from the model), `cache` (unchanged history), `pooled` (the model was busy or unavailable; pooled taste was used and the model result is cached for the next call) or `cold_start` (no history yet).
+`meta.state_source` reports where this call's taste came from: `model`, `cache`, `pooled` or `cold_start` (no history yet). It is informational; every value returns a usable ranking.
 
 ## Anonymous to signed in
 

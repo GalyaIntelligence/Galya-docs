@@ -1,6 +1,6 @@
 ---
 title: Taste Schemas
-description: "How Galya works: the model reads each item into a readout (a probability per option for every schema field), and a shopper's taste is computed from the readouts of what they interacted with."
+description: "How Galya works: the model reads each item through your schema into a readout, predicts each shopper's taste in the same terms, and ranks items by how well they fit, with the reasons why."
 ---
 
 ## Readouts
@@ -24,20 +24,13 @@ The readout is the index. There is no separate indexing step and nothing to embe
 
 ## Taste
 
-A shopper's **taste** is a distribution over the same fields, computed from the readouts of the items they interacted with:
+A shopper's **taste** is Galya's prediction of what they will respond to, expressed in the same fields as the readouts. It comes from everything they have done — what they liked, saved, bought, lingered on and skipped — and it updates with every interaction.
 
-- Positive interactions (liked, saved, added to bag, bought, long views) pull taste toward that item's options. Stronger signals count more: adding to bag counts more than a like.
-- Negative ones (skipped, unliked) push away from them.
-- Recent interactions count more than old ones.
-- The model then refines the pooled taste from the whole history: what this combination of interactions says about the shopper, beyond each item on its own.
-
-Taste is computed at query time, through whichever schema the call names, so interactions never need re-recording when you add a schema. It is cached per interaction history and refreshed in the background after new interactions; `meta.state_source` says which you got.
+Taste is read through whichever schema a call names, so one shopper's history works with any number of schemas, and you never re-record interactions when you add one.
 
 ## Ranking
 
-An item's score for a shopper is how much more likely its readout is under their taste than under the catalog as a whole, summed over fields. Items that share a `metadata.product_id` with something the shopper just interacted with are pushed down, so a page does not fill with variants of one product.
-
-Every ranked item carries `reasons`: the fields and options that lifted it most.
+Galya ranks items by how well they fit a shopper's taste, and keeps a page varied rather than filling it with variants of one product. Every ranked item carries `reasons`: the fields and options that made it a fit.
 
 ```json
 { "item_id": "watch_diver_42", "score": 0.42, "reasons": [

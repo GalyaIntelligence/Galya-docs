@@ -352,26 +352,18 @@ paths:
       summary: Record interactions, read taste, and rank — in one call
       description: "Everything about a shopper goes through this call. **`schema`** is required (an id\
         \ or an\ninline definition, as on `POST /v1/item`); everything else is optional:\n\n- **`interactions`**\
-        \ link items into the user's history. Each has an `item_id` and a\n  natural-language `tag` (\"\
-        added to bag\", \"liked\", \"watched 12s\", \"skipped\", \"bought\").\n  Galya maps the tag to\
-        \ a known signal (`read_as` in the response) for weighting and\n  keeps the raw text for the model.\
-        \ Interactions are idempotent by `id`: a retried call\n  does not double count. An interaction\
-        \ with an unknown `item_id` is not stored (status\n  `item_unknown`): upsert the item first. One\
-        \ with an item whose readout is still pending is\n  stored (`item_pending`) and counts once the\
-        \ readout exists. Unknown users are created on\n  first call. Tags read as `view` (no dwell),\
-        \ `impression` or `other` are stored but do not\n  move taste yet.\n- **`rank`** ranks items for\
-        \ this user by taste. With `item_ids` it reranks exactly those\n  (≤ 1000); with `query` it searches\
-        \ (\"black boots for work\") and ranks the matches; with\n  neither, it recommends from the whole\
-        \ catalog. `where` narrows any of them.\n  Every ranked item carries `reasons`: the readout fields\
-        \ and options that lifted it.\n- **`include: [taste]`** returns the user's taste profile.\n\n\
-        Interactions do not depend on a schema: they are stored once, and taste is computed per\nschema\
-        \ at query time from the readouts of the interacted items. So the same history can be\nread through\
-        \ any number of schemas. Items with no readout for the call's schema yet are\nqueued for one and\
-        \ listed in `not_ranked` (`pending`).\n\nInteractions recorded in a call are applied before that\
-        \ call's ranking. A shopper with no\ninteractions gets `score: 0` for every item; results then\
-        \ keep the order of `item_ids`\n(or catalog order), so callers can always render them.\n\nTaste\
-        \ is looked up from the model at query time and cached per interaction history; if the\nmodel\
-        \ is unavailable the pooled taste is used and `meta.state_source` says so.\n"
+        \ add to the shopper's history. Each has an `item_id` and a plain-language\n  `tag` (\"added to\
+        \ bag\", \"liked\", \"watched 12s\", \"skipped\", \"bought\"); `read_as` in the response\n  says\
+        \ how Galya understood it. Interactions are idempotent by `id`, so a retried call does not\n \
+        \ double count. An interaction with an unknown `item_id` is not stored (`item_unknown`): upsert\n\
+        \  the item first. Unknown users are created on first call.\n- **`rank`** ranks items for this\
+        \ shopper. With `item_ids` it reranks exactly those (up to 1000);\n  with `query` it searches\
+        \ (\"black boots for work\"); with neither, it recommends from the whole\n  catalog. `where` narrows\
+        \ any of them. Every ranked item carries `reasons`.\n- **`include: [taste]`** returns the shopper's\
+        \ taste profile.\n\nInteractions are stored once and read through whichever schema a call names,\
+        \ so the same history\nworks with any number of schemas. Interactions in a call apply to that\
+        \ call's ranking. A shopper\nwith no history yet gets every item back with `score: 0`, in your\
+        \ order, so you can always render\nthe result.\n"
       security:
       - WorkspaceApiKey: []
       - WorkspaceBearer: []
@@ -691,17 +683,15 @@ paths:
       - user
       operationId: searchWorkspace
       summary: Search the catalog by intent, ranked by taste
-      description: 'Convenience for `POST /v1/user` with `rank.query`, without interactions. Items are
+      description: 'Convenience for `POST /v1/user` with `rank.query`, without interactions: the items
+        that
 
-        retrieved by keyword match (case-insensitive, per term) on their title, text and metadata;
+        match what the shopper asked for, in the order that fits their taste (when `user_id` is given).
 
-        items matching more of the query''s terms come first, and the user''s taste (when `user_id` is
+        Search never hides an exact match. Same response shape as the `ranked` part of `/v1/user`. To
+        rank
 
-        given) orders items of equal match strength. Matches without a readout yet are still
-
-        returned, unscored, after the scored ones of the same strength. Same response shape as the
-
-        `ranked` part of `/v1/user`. To rank by taste alone (no query), use `POST /v1/user` with `rank`.
+        by taste alone, use `POST /v1/user` with `rank`.
 
         '
       security:
@@ -733,8 +723,8 @@ paths:
           $ref: '#/components/responses/MissingOrInvalidApiKey'
       x-mint:
         metadata:
-          description: Search the catalog by intent, ranked by taste. Convenience for POST /v1/user with
-            rank.query, without interactions. Items are retrieved by keyword match...
+          description: 'Search the catalog by intent, ranked by taste. Convenience for POST /v1/user with
+            rank.query, without interactions: the items that match what the shopper...'
           noindex: true
   /v1/recommend:
     post:
@@ -743,21 +733,12 @@ paths:
       - user
       operationId: recommendForUser
       summary: Recommend from the whole catalog for a user, on the Galya model
-      description: 'Convenience for `POST /v1/user` with `rank` and no `item_ids`: the top `limit` catalog
-        items for
-
-        this shopper''s taste. Every item with a readout is a candidate (no retrieval step); near-duplicates
-
-        of items the shopper just interacted with are pushed down. Each result carries `score`,
-
-        `contributions` (the readout fields that drove it) and a `reason`. `meta.state_source` says whether
-
-        the taste came from cache or was computed for this call. Typical p95 is under 100 ms from a
-
-        server in the same region with a kept-alive connection; `Server-Timing: worker;dur=…` reports
+      description: 'Convenience for `POST /v1/user` with `rank` and no `item_ids`: the `limit` items in
         the
 
-        time spent in Galya.
+        catalog that best fit this shopper''s taste, kept varied. Each result carries `score`,
+
+        `contributions` (the fields that made it a fit) and a display-ready `reason`.
 
         '
       security:
@@ -784,7 +765,7 @@ paths:
       x-mint:
         metadata:
           description: 'Recommend from the whole catalog for a user, on the Galya model. Convenience for
-            POST /v1/user with rank and no itemids: the top limit catalog items for...'
+            POST /v1/user with rank and no itemids: the limit items in the catalog...'
           noindex: true
   /v1/rerank:
     post:
@@ -796,26 +777,14 @@ paths:
       description: 'Convenience for `POST /v1/user` with `rank.item_ids`: put your own candidates (from
         your search,
 
-        a collection page, a carousel) in this shopper''s taste order. Candidates without a readout yet
-        are
+        a collection page, a carousel) in this shopper''s taste order. A rerank never loses your items:
 
-        kept, unscored, after the ranked ones (and listed under `explain.dropped.no_readout`), so a rerank
+        candidates Galya has not read yet come back after the ranked ones. Each result carries `score`,
 
-        never loses your items. Each result carries `score` and `contributions` (the readout fields that
+        `contributions` (the fields that made it a fit) and a display-ready `reason`. `include_state`
+        adds
 
-        drove it). `include_state: evidence` adds the shopper''s taste (`explain.user_state`): per field
-        the
-
-        top options with `p` and the catalog `prior`.
-
-
-        Taste comes from the shopper''s interactions (`POST /v1/user`), read by the model under the
-
-        schema''s fields; it is cached and refreshed in the background after new interactions
-
-        (`meta.state_source`). Typical p95 is under 100 ms for 30 candidates from a server in the same
-
-        region with a kept-alive connection.
+        the shopper''s taste as `explain.user_state`.
 
         '
       security:
@@ -1729,23 +1698,11 @@ components:
               - stale
               - fallback
               - pooled
-              description: 'Readout-state only. `model`: fresh from the model server; `cache`: stored
-                state for the
-
-                same positive interactions; `fallback`: the lookup failed (timeout, error, not
-
-                configured) and the pooled formula ranked; `pooled`: no positive signal yet.
-
-                '
+              description: Where this call's taste came from. Informational; every value returns a usable
+                ranking.
     ReadoutUserState:
       type: object
-      description: 'Readout-state rerank: the user state S the ranking used (pooled signals × the model
-
-        correction), per field the top 3 options with their probability `p` and the catalog prior
-
-        `prior` (the candidates'' marginal). Values are rounded to 4 significant digits.
-
-        '
+      description: The shopper's taste the ranking used, per field the options they lean toward.
       required:
       - fields
       - model_fields

@@ -1,12 +1,12 @@
 ---
 title: Search
-description: "Search the catalog by intent with POST /v1/search: keyword matches on item text and readout options, ordered by the shopper's taste."
+description: "Search the catalog by intent with POST /v1/search: the items that match what the shopper asked for, in the order that fits their taste."
 api: "POST /v1/search"
 ---
 
-Search a query against your catalog and order the matches for one shopper. This is the shortcut for [`POST /v1/user`](/guides/users#rank) with `rank.query`, without recording interactions.
+Search your catalog with what the shopper typed and get the matches in the order that fits them. This is the shortcut for [`POST /v1/user`](/guides/users#rank) with `rank.query`, without recording interactions.
 
-Items match by keyword (per term, case-insensitive) on their title, text and metadata. Items matching more of the query's terms come first; the shopper's taste orders items of equal match strength. A match whose readout is still being made is still returned, unscored, after the scored ones, so search never hides an exact match.
+The best matches for the query come first, and the shopper's taste orders them. Search never hides an exact match, even one Galya has not finished reading yet.
 
 <ParamField body="query" type="string" required>
   What the shopper typed, up to 500 characters.

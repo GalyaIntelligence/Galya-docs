@@ -1,10 +1,10 @@
 ---
 title: Recommend
-description: "Recommend from the whole catalog for one shopper with POST /v1/recommend: the top items for their taste, with near-duplicates of what they just saw pushed down."
+description: "Recommend from the whole catalog for one shopper with POST /v1/recommend: the items that best fit their taste, kept varied, with the reasons why."
 api: "POST /v1/recommend"
 ---
 
-The top items in your catalog for one shopper's taste. Every item with a readout is a candidate; there is no retrieval step to tune. Items sharing a `metadata.product_id` with something the shopper just interacted with are pushed down, so the list is not all variants of one product. This is the shortcut for [`POST /v1/user`](/guides/users#rank) with `rank` and no `item_ids`.
+The items in your catalog that best fit one shopper's taste, from the whole catalog, with no retrieval step to tune. The list stays varied rather than filling up with variants of one product. This is the shortcut for [`POST /v1/user`](/guides/users#rank) with `rank` and no `item_ids`.
 
 <ParamField body="user_id" type="string" required>
   The shopper to recommend for.
