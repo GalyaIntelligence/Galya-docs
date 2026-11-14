@@ -1,0 +1,77 @@
+---
+title: Sync your catalog
+description: "Keep Galya in step with your catalog: send every product once, then only what changes. Galya reads new and changed products on its own, and never re-reads what hasn't changed."
+---
+
+Your catalog lives in Galya as [items](/guides/items). Send each product once, then send only what changes. Galya takes care of the rest: it reads every new or changed product through your schema in the background, skips anything that hasn't changed, and keeps every item ready to rank.
+
+## 1. Send everything once
+
+Send your products in batches of up to 100. Upserts are idempotent by `id`, so you can run the same sync again safely: nothing is duplicated.
+
+```bash
+curl https://api.galya.io/v1/item \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "schema": "fashion",
+    "items": [
+      { "id": "sku_wrap_dress", "title": "Black wrap midi dress", "text": "Wrap silhouette, crepe, midi length.",
+        "image_url": "https://cdn.example.com/wrap-dress.jpg", "metadata": { "product_id": "1001", "price": 129 } }
+    ]
+  }'
+```
+
+The call returns `202` straight away. You don't wait for the model, call an index endpoint, or poll per product: each item is read in the background and becomes `ready`, usually within half a minute.
+
+## 2. Send only what changes
+
+Send a product again whenever it changes: from a product webhook, a nightly job, or both. Galya works out what that means:
+
+| You send | What Galya does |
+| --- | --- |
+| A new product | Reads it |
+| A product whose text or image changed | Reads it again; it ranks with the new readout within about a minute |
+| A product with only new metadata (price, stock, vendor) | Saves the metadata; no new reading needed |
+| The same product, unchanged | Nothing: it stays `ready` |
+| Only the fields that changed | Keeps every field you leave out |
+
+So a webhook can send just `{ "id": "sku_wrap_dress", "metadata": { "price": 99 } }`. Price changes show up in filters and results at once.
+
+To remove a product (sold out for good, unpublished), delete it with `DELETE /v1/item/{itemId}`. Shoppers' history with it is kept, but it stops counting toward their taste.
+
+## 3. Check that everything was read
+
+You don't have to check after every sync, but it's useful after the first one:
+
+```bash
+curl "https://api.galya.io/v1/item?schema=fashion&status=pending" -H "X-API-Key: $GALYA_API_KEY"
+curl "https://api.galya.io/v1/item?schema=fashion&status=failed" -H "X-API-Key: $GALYA_API_KEY"
+```
+
+- `pending` items are still being read. Ranking already works without them: they come back after the ranked ones until they're ready.
+- `failed` items had nothing to read (no text and no image) or couldn't be read. Fix the product and send it again; that retries it.
+
+## Switching or adding a schema
+
+Send your catalog with the new schema's id (for example `"schema": "watches"`, or your own `sch_…`). Only the ids are needed: Galya already has each product's text and image.
+
+```json
+{ "schema": "sch_9b1f2e7c4a", "items": [{ "id": "sku_wrap_dress" }, { "id": "sku_ankle_boot" }] }
+```
+
+Galya merges: if a product already has an answer to one of the new schema's questions (the same question and options, under any of its schemas), that answer is reused, and only the questions that are new to the product are asked. Adding three questions to an existing set costs three questions per product, not the whole set. Products keep their readouts under every other schema, so calls that name the old schema keep working while the new one fills in. Switch your user calls to the new schema once its items are `ready`.
+
+## Re-reading products
+
+To have Galya read products again from scratch, every question answered afresh, add `"overwrite": true`:
+
+```json
+{ "schema": "fashion", "items": [{ "id": "sku_wrap_dress" }], "overwrite": true }
+```
+
+You don't need this after editing a product; changed text or images are re-read on their own. Use it when you want fresh answers for products that haven't changed.
+
+<Tip>
+  You never send the same product twice "to be safe", and you never need to rebuild anything: Galya only reads what is new or changed, per schema.
+</Tip>

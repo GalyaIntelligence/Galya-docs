@@ -1,0 +1,45 @@
+---
+title: Predict your users' taste
+description: "Read what each shopper responds to, in your schema's terms, and rank for it. Taste is predicted from their interactions on its own: no training, no recompute calls."
+---
+
+Once you [sync your catalog](/guides/sync-catalog) and [record interactions](/guides/record-interactions), every shopper has a taste: Galya's prediction of what they'll respond to, in the fields of your schema. You don't train anything or schedule anything. Taste updates as interactions arrive, and every ranking uses it.
+
+## Read a shopper's taste
+
+```bash
+curl "https://api.galya.io/v1/user/shopper_1?schema=fashion" -H "X-API-Key: $GALYA_API_KEY"
+```
+
+```json
+{
+  "user_id": "shopper_1",
+  "schema_id": "fashion",
+  "taste": {
+    "summary": "Black, Wrap, Midi",
+    "evidence": 2.5,
+    "fields": [
+      { "field": "color", "top": [{ "option": "Black", "p": 0.61, "lift": 2.4 }] },
+      { "field": "silhouette", "top": [{ "option": "Wrap", "p": 0.48, "lift": 1.9 }] }
+    ]
+  }
+}
+```
+
+- `summary` is a one-line description you can show as-is: a profile chip, a CRM note, an email segment.
+- Per field, `p` is how likely they are to want each option, and `lift` is how much more than your catalog's baseline (1 = no preference).
+- `evidence` is how much history the taste rests on; 0 means no history yet.
+
+You can also get taste in the same call that records interactions or ranks: add `"include": ["taste"]` to `POST /v1/user`.
+
+## Rank for it
+
+Ranking is where taste pays off, and it's one call: [rerank your own list](/guides/rerank), [search](/guides/search) or [recommend](/guides/recommend). Each result comes with `reasons`, the fields and options that make it a fit for this shopper.
+
+## What you don't need to worry about
+
+- **No recompute calls.** Taste follows the shopper's interactions on its own. A call that records interactions ranks with them already applied.
+- **Any schema, same history.** Taste is read through whichever schema a call names. Add a schema later and every shopper already has a taste in it, from the history you recorded before.
+- **New shoppers.** With no history, every item scores 0 and comes back in your order (or catalog order), so a page always renders. Taste fills in from the first interaction.
+- **Speed.** Ranking calls read taste that's kept ready for them; they don't wait on the model. `meta.state_source` says where a call's taste came from, for information only: every value is a usable ranking.
+- **Shoppers who change.** Recent interactions count more than old ones, so taste follows what someone wants now.

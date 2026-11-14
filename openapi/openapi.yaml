@@ -1011,6 +1011,18 @@ components:
             $ref: '#/components/schemas/SchemaRef'
           readout:
             $ref: '#/components/schemas/Readout'
+          overwrite:
+            type: boolean
+            default: false
+            description: 'Read the item(s) again under `schema` even if unchanged, answering every question
+              afresh. By
+
+              default Galya merges: an unchanged item is left as it is, and a new read reuses the answers
+              the item
+
+              already has for the same questions under its other schemas, so only new questions are asked.
+
+              '
       - $ref: '#/components/schemas/ItemFields'
     ItemUpsertRequest:
       type: object
@@ -1026,6 +1038,18 @@ components:
           maxItems: 100
           items:
             $ref: '#/components/schemas/ItemInput'
+        overwrite:
+          type: boolean
+          default: false
+          description: 'Read the item(s) again under `schema` even if unchanged, answering every question
+            afresh. By
+
+            default Galya merges: an unchanged item is left as it is, and a new read reuses the answers
+            the item
+
+            already has for the same questions under its other schemas, so only new questions are asked.
+
+            '
     ItemUpsertResponse:
       type: object
       required:

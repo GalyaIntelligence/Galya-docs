@@ -10,6 +10,10 @@ An item is one thing you sell or show: a product, a variant, a video, a look. Se
   A schema id (a built-in such as `fashion` or `watches`, or your own `sch_...`) or an inline [schema definition](/guides/schemas). The response's `schema_id` is the id it resolved to.
 </ParamField>
 
+<ParamField body="overwrite" type="boolean" default="false">
+  Read the items again from scratch, every question answered afresh, even if nothing changed. By default Galya merges: unchanged items are left as they are, and new reads reuse answers the item already has.
+</ParamField>
+
 <ParamField body="items" type="object[]" required>
   1 to 100 items.
 
@@ -78,11 +82,13 @@ The call returns `202` with each item's status for the schema:
 
 Track progress with `GET /v1/item?schema=fashion&status=pending`, or read one item with `GET /v1/item/{itemId}?schema=fashion`.
 
-Upserting an item whose `text` and `image_url` have not changed does not read it again. Omitted fields are kept, so you can update `metadata` alone.
+Upserting an item whose `text` and `image_url` have not changed does not read it again. Omitted fields are kept, so you can update `metadata` alone, or send just `{ "id": ... }` to re-index an item Galya already has.
 
 ## One item, many schemas
 
 Upsert the same item with another schema and it gets a second readout; the first stays. `GET /v1/item/{itemId}` returns `readouts` keyed by schema id.
+
+Readouts merge: when an item is read under a schema, any of its questions the item already has an answer to (the same question and options, under another schema, from the same text and image) are reused, and only the new questions are asked. Send `"overwrite": true` to read every question again instead.
 
 ## Filter the catalog
 
