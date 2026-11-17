@@ -50,6 +50,10 @@
           {
             "group": "Ranking shortcuts",
             "pages": ["guides/search", "guides/rerank", "guides/recommend"]
+          },
+          {
+            "group": "Agentic Commerce",
+            "pages": ["agentic-commerce/mcp-server", "agentic-commerce/wallets"]
           }
         ]
       },
