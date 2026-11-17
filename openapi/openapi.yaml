@@ -1394,13 +1394,13 @@ components:
         email:
           type: string
           maxLength: 320
-          description: 'Business only. The shopper''s email, stored only as a keyed hash. If a wallet
-            signed in with the same
+          description: 'Business only. The shopper''s email, stored only as a keyed hash. If the person
+            already agreed to share
 
-            verified email, a pending link is created for its owner to approve (or active at once if the
-            owner turned
+            their Galya wallet with this store (same verified email), the shopper connects; otherwise
+            nothing happens.
 
-            on `auto_link`). The response never says whether a wallet matched.
+            The response never says whether a wallet exists.
 
             '
         grant:
