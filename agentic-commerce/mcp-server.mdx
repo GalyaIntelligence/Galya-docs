@@ -1,0 +1,129 @@
+---
+title: MCP server
+description: "Galya MCP: one connector that gives Claude, ChatGPT and other AI agents a person's taste. Remember what they like, rank any products by it, and carry it to every store with their consent."
+---
+
+Galya MCP is a remote [Model Context Protocol](https://modelcontextprotocol.io) server. It gives an AI agent taste
+memory for the person it is shopping for: what they like, what they avoid, and a ranking of any products it finds,
+with the reasons for each.
+
+| | |
+|---|---|
+| **Server URL** | `https://mcp.galya.io/mcp` |
+| **Transport** | Streamable HTTP |
+| **Sign-in** | OAuth 2.1 with PKCE (Galya account), or a Galya API key |
+
+## Connect
+
+<Tabs>
+  <Tab title="Claude">
+    1. Open **Settings → Connectors → Add custom connector**.
+    2. Enter `https://mcp.galya.io/mcp` and choose **Add**.
+    3. Choose **Connect** and sign in with your Galya account.
+
+    Claude Code: `claude mcp add --transport http galya https://mcp.galya.io/mcp`, then run `/mcp` to sign in.
+  </Tab>
+  <Tab title="ChatGPT">
+    1. In **Settings → Apps & Connectors**, turn on developer mode under **Advanced settings**.
+    2. Choose **Create**, enter `https://mcp.galya.io/mcp`, and pick **OAuth** for authentication.
+    3. Sign in with your Galya account when asked.
+  </Tab>
+  <Tab title="Other clients">
+    Any MCP client that supports remote servers and OAuth can connect to `https://mcp.galya.io/mcp`. Clients
+    discover the sign-in from the server: they register themselves (dynamic client registration or a client ID
+    metadata document) and send you to the Galya sign-in page.
+
+    To connect without signing in, send a Galya API key as a bearer token:
+
+    ```json
+    {
+      "mcpServers": {
+        "galya": {
+          "type": "http",
+          "url": "https://mcp.galya.io/mcp",
+          "headers": { "Authorization": "Bearer galya_sk_..." }
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Your wallet, or a business
+
+One connector works for both. When you sign in, each tool call acts on, in order:
+
+1. the business workspace the agent names (`workspace_id`);
+2. otherwise the default workspace you chose (ask the agent to "use my Acme workspace", or call
+   `galya_set_connection` yourself);
+3. otherwise **your own Galya wallet**.
+
+<CardGroup cols={2}>
+  <Card title="Wallet" icon="wallet">
+    Your portable taste: one person, kept across every store and assistant you use. Tools need no user id. See
+    [Wallets](/agentic-commerce/wallets).
+  </Card>
+  <Card title="Business workspace" icon="store">
+    A store's catalog and shoppers. Tools take the shopper's `user_id`. You can reach the workspaces you are a member
+    of.
+  </Card>
+</CardGroup>
+
+A business's `galya_sk_` key always acts on that business's workspace.
+
+## Tools
+
+The taste loop, on every connection:
+
+| Tool | What it does |
+|---|---|
+| `galya_profile` | What Galya knows about this person: a summary, the preferences it is most confident in, and how much evidence backs them. |
+| `galya_note_preference` | Record a stated preference that is not about one product: "I hate polyester", "earth tones only". |
+| `galya_remember` | Record reactions to products: liked, saved, bought, returned, "not for me", skipped. Plain language is fine. |
+| `galya_rank` | Rank candidate products (web results, a store feed, a UCP catalog search) by taste, with the reasons for each. |
+| `galya_discover` | Search or recommend among products Galya already knows. |
+| `galya_get_products` | Product details and the traits Galya read from them. |
+
+Wallet: `galya_wallet` (status and stores asking to connect), `galya_wallet_link` (approve or revoke a store),
+`galya_wallet_settings` (connect stores automatically by email), `galya_share_with_store` (a grant for one store).
+
+Business: `galya_connect_shopper` (store a shopper's email, or redeem the grant their agent handed you).
+
+Connection: `galya_connection` (where tools act now, and the workspaces you can choose) and `galya_set_connection`.
+
+Agents pass products as they found them: title, description, image URL, URL, price, brand. Galya reads each product
+once, and identical content is never read twice. `galya_rank` waits a few seconds for new products to be read, and
+lists any it could not read yet under `pending`.
+
+## How an agent uses it
+
+<Steps>
+  <Step title="Learn the person">
+    At the start of a shopping conversation the agent calls `galya_profile`.
+  </Step>
+  <Step title="Remember what they say">
+    "I can't stand anything shiny" becomes `galya_note_preference`. "I returned that puffer" becomes `galya_remember`.
+  </Step>
+  <Step title="Rank what it finds">
+    The agent passes the options it found to `galya_rank` and presents them in that order, citing the reasons.
+  </Step>
+  <Step title="Learn from the outcome">
+    When the person buys, saves or rejects something, the agent records it with `galya_remember`.
+  </Step>
+</Steps>
+
+## Authorization
+
+Galya MCP follows the [MCP authorization spec](https://modelcontextprotocol.io/specification/draft/basic/authorization):
+
+- Protected-resource metadata is at `https://mcp.galya.io/.well-known/oauth-protected-resource/mcp` and names the
+  authorization server, `https://clerk.galya.io`.
+- Requests without a valid access token get `401` with a `WWW-Authenticate: Bearer` challenge pointing at that
+  metadata. Invalid tokens add `error="invalid_token"`.
+- Access tokens must be issued for exactly `https://mcp.galya.io/mcp`. Expired tokens, tokens for any other
+  audience, and session tokens are rejected.
+- Scopes: `openid`, `profile` and `email`. Your verified email is used only to connect your wallet to stores where you
+  shop with the same email, with your approval.
+
+The MCP server never passes your sign-in token on. It calls the Galya API with a short-lived assertion for your
+account, and the API checks your membership of a business workspace on every call.

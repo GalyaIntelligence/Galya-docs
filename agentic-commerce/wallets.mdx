@@ -1,0 +1,70 @@
+---
+title: Wallets
+description: "A Galya wallet is one person's portable taste, carried by their AI agent. Stores rank a shopper by it only with the person's consent, never blended with the store's own data."
+---
+
+A **wallet** is one person's taste, kept by Galya and carried by their own AI agent across every store and
+assistant. It is a workspace with one user, `self`, and the same API as any workspace: `/v1/item` (products the agent
+found), `/v1/user` (omit `user_id`), `/v1/rerank`, `/v1/recommend` and `/v1/search`.
+
+People get a wallet the first time they sign in to [Galya MCP](/agentic-commerce/mcp-server) with their own account.
+
+## Stores and wallets
+
+A store ranks a shopper by their wallet only while the person has an **active link** to that shopper. Otherwise the
+store uses its own profile of the shopper. The two are never blended.
+
+A link becomes active in one of three ways:
+
+| How | What happens |
+|---|---|
+| **Email match** | The store passes the shopper's `email` on `POST /v1/user`. If a wallet signed in with the same verified email, the person sees a pending request and approves it. |
+| **Auto-link** | The person turned on `auto_link`, so email matches connect without asking. |
+| **Grant** | The person's agent creates a grant for one store (`POST /v1/wallet/grants`) and hands it to the store, which passes it as `grant` on `POST /v1/user`. |
+
+The person can revoke a link at any time, and the store goes back to its own data.
+
+<Note>
+Emails are stored only as a keyed hash, and the response never says whether a wallet matched. A pending link changes
+nothing until the person approves it.
+</Note>
+
+## For stores
+
+Pass what you know, and Galya handles the rest:
+
+```bash
+curl https://api.galya.io/v1/user \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "cust_123",
+    "schema": "fashion",
+    "email": "shopper@example.com",
+    "rank": { "item_ids": ["sku_1", "sku_2", "sku_3"] }
+  }'
+```
+
+`meta.profile` in the response says whose taste ranked the shopper: `workspace` (yours) or `wallet` (theirs, linked).
+
+To redeem a grant the shopper's agent gave you, send `grant` instead of (or with) `email`. The response includes
+`wallet_link.status`.
+
+## For wallets
+
+A wallet calls the same endpoints with its own credentials (a personal sign-in through Galya MCP, or a wallet key):
+
+| Endpoint | Use |
+|---|---|
+| `GET /v1/wallet` | Email status, `auto_link`, link counts |
+| `PATCH /v1/wallet` | Turn `auto_link` on or off |
+| `GET /v1/wallet/links` | Stores connected or asking to connect |
+| `POST /v1/wallet/links/{id}/approve` · `/revoke` | Decide a link |
+| `POST /v1/wallet/grants` | A grant for one store (`workspace_id`, `ttl_s`) |
+| `GET` · `PUT /v1/wallet/connector` | Where the person's connector acts by default |
+| `DELETE /v1/wallet` | Erase the wallet and everything in it |
+
+## Signals
+
+Wallet history uses the same signals as any shopper, including the negatives people state in conversation:
+`disliked` ("not for me", "hates", "never again") and `returned` ("refunded", "sent back").
