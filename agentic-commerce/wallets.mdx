@@ -1,6 +1,6 @@
 ---
 title: Wallets
-description: "A Galya wallet is one person's portable taste, carried by their AI agent. Stores rank a shopper by it only with the person's consent, never blended with the store's own data."
+description: "A Galya wallet is one person's portable taste, carried by their AI agent. A store uses it only after the person agrees to share with that store, and never blends it with the store's own data."
 ---
 
 A **wallet** is one person's taste, kept by Galya and carried by their own AI agent across every store and
@@ -9,29 +9,41 @@ found), `/v1/user` (omit `user_id`), `/v1/rerank`, `/v1/recommend` and `/v1/sear
 
 People get a wallet the first time they sign in to [Galya MCP](/agentic-commerce/mcp-server) with their own account.
 
-## Stores and wallets
+## Sharing with a store
 
-A store ranks a shopper by their wallet only while the person has an **active link** to that shopper. Otherwise the
-store uses its own profile of the shopper. The two are never blended.
+A wallet and a store's workspace stay separate. A store uses a person's wallet only after **the person agrees to
+share with that store**:
 
-A link becomes active in one of three ways:
+<Steps>
+  <Step title="The agent asks">
+    "Can I share your taste with Acme?" Nothing happens until the person says yes.
+  </Step>
+  <Step title="The agent connects the store">
+    After the yes, the agent calls `galya_connect_store` (`POST /v1/wallet/stores`).
+  </Step>
+  <Step title="Galya does the rest inside the platform">
+    If the store runs Galya, Galya finds the person among the store's shoppers by their verified sign-in email. From
+    then on the store's ranking for that shopper uses the wallet's taste instead of its own profile. If the store has
+    not seen them yet, it connects the first time it does.
+  </Step>
+</Steps>
 
-| How | What happens |
-|---|---|
-| **Email match** | The store passes the shopper's `email` on `POST /v1/user`. If a wallet signed in with the same verified email, the person sees a pending request and approves it. |
-| **Auto-link** | The person turned on `auto_link`, so email matches connect without asking. |
-| **Grant** | The person's agent creates a grant for one store (`POST /v1/wallet/grants`) and hands it to the store, which passes it as `grant` on `POST /v1/user`. |
-
-The person can revoke a link at any time, and the store goes back to its own data.
+The store never receives the wallet itself, only the results of its usual calls. The person can stop sharing at any
+time (`galya_disconnect_store`), and the store goes back to its own data about them at once.
 
 <Note>
-Emails are stored only as a keyed hash, and the response never says whether a wallet matched. A pending link changes
-nothing until the person approves it.
+A store can never start this. Sending a shopper's `email` on its own changes nothing: the store's shopper is connected
+only if that person already agreed to share with that store. Emails are stored only as a keyed hash, and responses
+never say whether a wallet exists.
 </Note>
+
+If the store knows the person by a different email, or at a checkout, the agent can instead hand the store a one-off
+**grant** (`galya_share_with_store`, `POST /v1/wallet/grants`), again only after the person agrees. The store passes
+it as `grant` on `POST /v1/user`.
 
 ## For stores
 
-Pass what you know, and Galya handles the rest:
+Keep calling the API as usual, and pass the shopper's email when you have it:
 
 ```bash
 curl https://api.galya.io/v1/user \
@@ -45,22 +57,21 @@ curl https://api.galya.io/v1/user \
   }'
 ```
 
-`meta.profile` in the response says whose taste ranked the shopper: `workspace` (yours) or `wallet` (theirs, linked).
-
-To redeem a grant the shopper's agent gave you, send `grant` instead of (or with) `email`. The response includes
-`wallet_link.status`.
+`meta.profile` in the response says whose taste ranked the shopper: `workspace` (yours) or `wallet` (theirs, shared
+with you).
 
 ## For wallets
 
-A wallet calls the same endpoints with its own credentials (a personal sign-in through Galya MCP, or a wallet key):
+A wallet calls these with its own credentials (a personal sign-in through Galya MCP, or a wallet key):
 
 | Endpoint | Use |
 |---|---|
-| `GET /v1/wallet` | Email status, `auto_link`, link counts |
-| `PATCH /v1/wallet` | Turn `auto_link` on or off |
-| `GET /v1/wallet/links` | Stores connected or asking to connect |
-| `POST /v1/wallet/links/{id}/approve` · `/revoke` | Decide a link |
-| `POST /v1/wallet/grants` | A grant for one store (`workspace_id`, `ttl_s`) |
+| `GET /v1/wallet` | Email status and how many stores it shares with |
+| `GET /v1/wallet/stores/search?q=` | Find a store running Galya by name |
+| `POST /v1/wallet/stores` | Share with a store, after the person agrees (`workspace_id`) |
+| `GET /v1/wallet/stores` | Stores it shares with: `connected`, or `waiting` for the store to see the person |
+| `DELETE /v1/wallet/stores/{workspace_id}` | Stop sharing with a store |
+| `POST /v1/wallet/grants` | A one-off grant for one store |
 | `GET` · `PUT /v1/wallet/connector` | Where the person's connector acts by default |
 | `DELETE /v1/wallet` | Erase the wallet and everything in it |
 

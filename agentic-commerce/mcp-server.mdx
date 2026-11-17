@@ -84,8 +84,8 @@ The taste loop, on every connection:
 | `galya_discover` | Search or recommend among products Galya already knows. |
 | `galya_get_products` | Product details and the traits Galya read from them. |
 
-Wallet: `galya_wallet` (status and stores asking to connect), `galya_wallet_link` (approve or revoke a store),
-`galya_wallet_settings` (connect stores automatically by email), `galya_share_with_store` (a grant for one store).
+Wallet: `galya_wallet` (status and the stores it shares with), `galya_connect_store` (share your taste with a store,
+only after you agree), `galya_disconnect_store`, and `galya_share_with_store` (a one-off grant for one store).
 
 Business: `galya_connect_shopper` (store a shopper's email, or redeem the grant their agent handed you).
 
@@ -110,6 +110,10 @@ lists any it could not read yet under `pending`.
   <Step title="Learn from the outcome">
     When the person buys, saves or rejects something, the agent records it with `galya_remember`.
   </Step>
+  <Step title="Share with a store, if they agree">
+    "Can I share your taste with Acme?" Only after a yes does the agent call `galya_connect_store`. If Acme runs Galya,
+    it ranks the person by their wallet from then on.
+  </Step>
 </Steps>
 
 ## Authorization
@@ -122,8 +126,8 @@ Galya MCP follows the [MCP authorization spec](https://modelcontextprotocol.io/s
   metadata. Invalid tokens add `error="invalid_token"`.
 - Access tokens must be issued for exactly `https://mcp.galya.io/mcp`. Expired tokens, tokens for any other
   audience, and session tokens are rejected.
-- Scopes: `openid`, `profile` and `email`. Your verified email is used only to connect your wallet to stores where you
-  shop with the same email, with your approval.
+- Scopes: `openid`, `profile` and `email`. Your verified email is used only to find you at a store you chose to share
+  your taste with.
 
 The MCP server never passes your sign-in token on. It calls the Galya API with a short-lived assertion for your
 account, and the API checks your membership of a business workspace on every call.
