@@ -1,0 +1,202 @@
+---
+title: Registry search
+description: "Search products across every store in the Galya merchant registry with POST /v1/registry/search, ranked by a person's taste, and look up whether a store is in the registry and runs Galya."
+---
+
+The Galya **merchant registry** holds online stores and their products: Galya stores that opt in, stores with a UCP
+catalog, and partner sources, all read by Galya. Search it to shop across stores with results ranked by the person's
+taste, or look up a store to see whether it is in the registry and runs Galya.
+
+There is one store per storefront, whatever its sources, and one product per product page, with an **offer** from
+each source that carries it (its link, price and availability).
+
+Galya MCP's [`galya_search` and `galya_store`](/agentic-commerce/mcp-server#tools) tools call these endpoints, so an
+agent connected to Galya searches the registry the same way.
+
+## Authentication
+
+Any key works, a store's or a person's:
+
+- **Business:** a workspace secret (`galya_sk_…`), or an account key (`galya_ak_…`) with `X-Galya-Workspace-Id`. See
+  [Authentication](/authentication).
+- **Wallet:** a person's own [wallet](/agentic-commerce/wallets), for example through Galya MCP signed in with a
+  personal account.
+
+Adding stores from other sources and re-syncing them is done by Galya and is not part of the public API.
+
+## Search
+
+`POST /v1/registry/search` matches the query by keyword against the products of every listed store, then orders the
+matches by taste.
+
+<ParamField body="query" type="string" required>
+  What to look for, up to 500 characters.
+</ParamField>
+
+<ParamField body="limit" type="integer" default="20">
+  1 to 50.
+</ParamField>
+
+<ParamField body="user_id" type="string">
+  Business only: your id for the shopper, to rank by their taste. Omit it for unpersonalised results. A wallet
+  searches as itself and omits it.
+</ParamField>
+
+<ParamField body="store_ids" type="string[]">
+  Only search these stores (`sto_…`), up to 50.
+</ParamField>
+
+### Personalisation
+
+Whose taste ranks the results depends on the key:
+
+| Caller | Ranked by |
+| --- | --- |
+| Wallet | The wallet's own taste, always. Passing a `user_id` is an error (`wallet_user_is_self`). |
+| Business, with `user_id` | The shopper's Galya wallet if they [shared it with you](/agentic-commerce/wallets#sharing-with-a-store), otherwise your own profile of them (from `POST /v1/user`). The two are never blended. |
+| Business, no `user_id` | No taste: match order only. |
+
+`meta.taste` says which: `applied` or `none`.
+
+<RequestExample>
+
+```bash
+curl https://api.galya.io/v1/registry/search \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "black linen dress", "user_id": "shopper_1", "limit": 10}'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "results": [
+    {
+      "item_id": "sto_4f1c9a2b7e30:9a1f0c22d4b7e6a1",
+      "score": 0.42,
+      "title": "Linen midi dress, black",
+      "image_url": "https://cdn.example.com/dress.jpg",
+      "reasons": [{ "field": "color", "option": "Black", "lift": 0.21 }],
+      "store": {
+        "id": "sto_4f1c9a2b7e30",
+        "domain": "example-store.com",
+        "name": "Example Store",
+        "galya": true,
+        "accepts_grants": true,
+        "checkout": null
+      },
+      "offers": [
+        { "source": "galya_member", "url": "https://example-store.com/products/linen-midi-dress", "price": 120, "currency": "USD", "available": true }
+      ]
+    }
+  ],
+  "meta": { "taste": "applied", "candidates": 1840, "latency_ms": 96 }
+}
+```
+
+</ResponseExample>
+
+Each result has:
+
+<ResponseField name="item_id" type="string">The product's registry id.</ResponseField>
+<ResponseField name="score" type="number">Taste score; `0` for every result when no taste applies.</ResponseField>
+<ResponseField name="title" type="string | null">The product's title.</ResponseField>
+<ResponseField name="image_url" type="string | null">A product image.</ResponseField>
+<ResponseField name="reasons" type="object[]">The readout fields and options that lifted the product, as in [Search](/guides/search).</ResponseField>
+<ResponseField name="store" type="object">
+  The store: `id` (`sto_…`), `domain`, `name`, `galya` (it runs Galya), `accepts_grants` (it takes wallet grants) and
+  `checkout` (its UCP checkout endpoint, when known).
+</ResponseField>
+<ResponseField name="offers" type="object[]">
+  One per source that carries the product: `source` (`galya_member`, `ucp` or `channel3`), `url` (where to buy),
+  `price`, `currency` and `available`. A Galya store's own offer comes first.
+</ResponseField>
+
+`meta` also carries `candidates` (the searchable products considered) and `latency_ms`.
+
+## Stores
+
+### Look up a store by domain
+
+`GET /v1/registry/stores?domain=` takes the store's domain or any URL on it (`allbirds.com`,
+`https://www.allbirds.com/products/x`), and answers `404 not_found` when the store is not in the registry.
+
+```bash
+curl "https://api.galya.io/v1/registry/stores?domain=example-store.com" \
+  -H "X-API-Key: $GALYA_API_KEY"
+```
+
+### Get a store by id
+
+`GET /v1/registry/stores/:id` returns a store by its `sto_…` id, from search results or a lookup.
+
+```json 200
+{
+  "id": "sto_4f1c9a2b7e30",
+  "domain": "example-store.com",
+  "aliases": ["example-store.myshopify.com"],
+  "name": "Example Store",
+  "platform": "shopify",
+  "sources": ["galya_member", "ucp"],
+  "galya": true,
+  "verified_via": "shopify_install",
+  "listed": true,
+  "accepts_grants": true,
+  "ucp": { "catalog": "https://example-store.com/ucp/catalog", "checkout": null },
+  "product_count": 1840,
+  "last_synced_at": "2026-11-18T09:12:44.000Z"
+}
+```
+
+`listed` says whether the store's products appear in search. `verified_via` says how Galya knows the store is who it
+says it is: `shopify_install`, `galya_declaration`, `ucp_profile`, `partner` or `unverified`.
+
+## Your store's listing
+
+A Galya store joins the registry through the Shopify app. These two endpoints are for a business key only;
+a wallet gets `403 business_only`.
+
+- `GET /v1/registry/membership` returns your store's entry (the same fields as above), or `404` if your workspace has
+  no registry store.
+- `PUT /v1/registry/membership` with `{"listed": true}` lists your products in registry search. Galya copies them into
+  the registry with their readouts and reads any that are not read yet; the response adds `reading`, the number queued.
+  `{"listed": false}` hides them from search at once.
+
+```bash
+curl -X PUT https://api.galya.io/v1/registry/membership \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"listed": true}'
+```
+
+## Rate limits
+
+Registry calls count toward the caller's rate limit like any other call: a number of requests per second set by the
+account's plan, or a wallet's fixed limit. Over it, the API answers `429` with a `Retry-After` header:
+
+```json 429
+{
+  "error": "rate_limited",
+  "limit": "rate_limit_rps",
+  "retry_after": 1,
+  "message": "Your plan allows 5 requests per second"
+}
+```
+
+Wait `retry_after` seconds and retry. A `429` with `quota_exceeded` means a quota for the period is used up; retrying
+soon will not help. Galya MCP returns both as tool errors, with `retry_after` and `retryable`.
+
+## Errors
+
+| Status | `error` | When |
+| --- | --- | --- |
+| 400 | `bad_request` | `query` missing or over 500 characters, `limit` outside 1–50, `domain` missing, or `listed` not a boolean. |
+| 400 | `wallet_user_is_self` | A wallet passed a `user_id` to search. |
+| 401 | | The key is missing or invalid. |
+| 403 | `business_only` | A wallet called `/v1/registry/membership`. |
+| 404 | `not_found` | No store with that id or domain, or your workspace has no registry store. |
+| 429 | `rate_limited`, `quota_exceeded` | See [Rate limits](#rate-limits). |
+| 503 | `model_not_configured` | The Galya model is unavailable; retry later. |

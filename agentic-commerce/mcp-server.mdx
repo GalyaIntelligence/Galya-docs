@@ -84,6 +84,16 @@ The taste loop, on every connection:
 | `galya_discover` | Search or recommend among products Galya already knows. |
 | `galya_get_products` | Product details and the traits Galya read from them. |
 
+Shopping across stores, on every connection, through the [merchant registry](/agentic-commerce/registry-search):
+
+| Tool | What it does |
+|---|---|
+| `galya_search` | Search products across every store in the Galya registry, ranked by taste (a wallet's own; for a business, the `user_id` shopper's). Calls `POST /v1/registry/search`. |
+| `galya_store` | Look up a store by id or by domain: whether it is listed, runs Galya and takes wallet grants. Calls `GET /v1/registry/stores`. |
+
+When the API's [rate limit](/agentic-commerce/registry-search#rate-limits) is reached, tools return a `rate_limited`
+error with `retry_after` in seconds.
+
 Wallet: `galya_wallet` (status and the stores it shares with), `galya_connect_store` (share your taste with a store,
 only after you agree), `galya_disconnect_store`, and `galya_share_with_store` (a one-off grant for one store).
 

@@ -37,10 +37,16 @@ PUBLIC_OPERATIONS: set[tuple[str, str]] = {
     ("get", "/v1/schemas"),
     ("get", "/v1/schemas/{schemaId}"),
     ("delete", "/v1/schemas/{schemaId}"),
-    # Ranking shortcuts
+    # Taste Operations
     ("post", "/v1/search"),
     ("post", "/v1/recommend"),
     ("post", "/v1/rerank"),
+    # Merchant registry (agentic-commerce/registry-search.mdx); its admin routes stay private.
+    ("post", "/v1/registry/search"),
+    ("get", "/v1/registry/stores"),
+    ("get", "/v1/registry/stores/{storeId}"),
+    ("get", "/v1/registry/membership"),
+    ("put", "/v1/registry/membership"),
     # Connectors and agentic search stay live for workspaces that use them, but are not
     # in the public docs.
 }

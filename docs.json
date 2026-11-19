@@ -37,23 +37,25 @@
           },
           {
             "group": "Concepts",
-            "pages": ["concepts/taste-schemas"]
+            "pages": [
+              "concepts/taste-schemas",
+              {
+                "group": "Agentic Commerce",
+                "pages": ["agentic-commerce/mcp-server", "agentic-commerce/wallets", "agentic-commerce/registry-search"]
+              }
+            ]
           },
           {
             "group": "Catalog",
             "pages": ["guides/items", "guides/schemas", "guides/schema-library"]
           },
           {
-            "group": "Shoppers",
+            "group": "Entities",
             "pages": ["guides/users"]
           },
           {
-            "group": "Ranking shortcuts",
+            "group": "Taste Operations",
             "pages": ["guides/search", "guides/rerank", "guides/recommend"]
-          },
-          {
-            "group": "Agentic Commerce",
-            "pages": ["agentic-commerce/mcp-server", "agentic-commerce/wallets"]
           }
         ]
       },
