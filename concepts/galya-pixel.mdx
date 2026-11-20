@@ -1,0 +1,99 @@
+---
+title: Galya Pixel
+description: "The universal embedded tracker: measures how each person engages with your media and text content, by its Galya indexed id, and feeds that engagement into their taste."
+---
+
+The **Galya Pixel** is a small script you embed on any site. You tag the content you show (product cards, images, videos, audio, articles) with the item's **Galya indexed id**. The pixel then measures how each person engages with each item and sends it to Galya analytics ingestion, where it becomes the evidence behind that person's taste.
+
+It's the same signal source on every surface: your own site, a Shopify store (where the Galya app installs it for you), and other integrations. The TypeScript SDK is for calling the Galya API from code; the pixel is for measuring engagement in the browser.
+
+## How it fits
+
+```
+your page ──► Galya Pixel ──► analytics ingestion ──► the shopper's interactions ──► taste (readouts)
+  [data-galya-id="sku_123"]     dwell, depth, actions,          per item id               ranking, search,
+                                media progress                                             recommendations
+```
+
+1. **Index your items**, with `POST /v1/item`, a connector, or the Shopify app. Each item has an id, and the model reads it into a [readout](/concepts/taste-schemas).
+2. **Tag where they appear** with `data-galya-id="<that id>"`.
+3. **The pixel measures engagement** per item: how long it was seen, how far it was read, whether a video was watched to the end, whether it was saved or clicked through.
+4. **Galya weighs those interactions** against each item's readout to build the person's taste. That's why the id matters: it connects what was seen to what Galya already knows about the item.
+
+## Embed
+
+<CodeGroup>
+
+```html Hosted ingestion
+<script async src="https://cdn.jsdelivr.net/npm/@galya/pixel/dist/galya-pixel.js"
+        data-key="galya_wpub_…"></script>
+```
+
+```html Proxy mode (no key in the page)
+<script async src="https://cdn.jsdelivr.net/npm/@galya/pixel/dist/galya-pixel.js"
+        data-endpoint="/apps/galya/events"></script>
+```
+
+```ts npm
+import { startPixel } from "@galya/pixel";
+
+const pixel = startPixel({ publishableKey: "galya_wpub_…" });
+```
+
+</CodeGroup>
+
+- **Hosted ingestion** uses a **publishable** key (`galya_wpub_…`). The pixel refuses secret keys.
+- **Proxy mode** sends to an endpoint on your own site, and your server adds the credentials. The Shopify app works this way, through the store's app proxy.
+
+## Tag content
+
+```html
+<article data-galya-id="sku_123">
+  <img src="/coat.jpg" alt="Wool coat">
+  <h3>Wool coat</h3>
+  <a href="/products/wool-coat">View</a>             <!-- click_through -->
+  <button data-galya-action="save">Save</button>     <!-- save · share · expand · dismiss -->
+</article>
+
+<figure data-galya-id="lookbook_fw26" data-galya-type="video">
+  <video src="/lookbook.mp4" title="FW26 lookbook" controls></video>
+</figure>
+```
+
+`data-galya-type` (`text`, `image`, `video`, `audio` or `mixed`) is optional: when it's missing, the pixel infers it from the element. Items added later, by infinite scroll or client-side rendering, are picked up automatically.
+
+## What it measures
+
+The pixel sends one event per **interaction window**: the item leaves view, the tab hides, an action happens, or the page closes.
+
+| Signal | |
+|---|---|
+| **Dwell** | Time the item was at least half visible while the tab was visible, also normalised to how long the item takes to consume: reading time for text, a glance for an image, duration for media. |
+| **Depth and direction** | How far through the item the person scrolled, and how much of that scrolling was forward. |
+| **Hover** | Time the pointer rested on the item. |
+| **Revisits** | How many times the item came back into view this session. |
+| **Action** | The strongest one: save, share, click-through, expand or dismiss. |
+| **Media** | Played time, furthest progress, play count, and whether it finished. |
+| **Snapshot** | Once per item per session, the item's text, image and media URLs, so Galya can read content that isn't indexed yet. |
+
+Glances under a second are dropped, unless the person acts on the item.
+
+## Identity
+
+Without sign-in, events belong to an anonymous id for that browser. When a person signs in or checks out, call `identify`:
+
+```js
+galya('identify', 'user_123', { email: 'jane@example.com' });
+```
+
+The email is **hashed in the browser** (SHA-256 of the trimmed, lower-cased address) and only the hash is sent, together with the anonymous id. Galya can then join that browser's earlier anonymous activity, and the same person's activity on other sites, to one profile, so their taste follows them. `identify(null)` on sign-out forgets both values.
+
+## Privacy
+
+- **It honours Do Not Track and Global Privacy Control** by default.
+- **It can wait for consent:** with `requireConsent: true`, nothing is tracked until `galya('consent', true)`, and the choice is remembered.
+- **Page URLs are sent without query strings or fragments.**
+- **No cookies,** and in proxy mode no key in the page either.
+- **The content snapshot** is capped text plus media URLs, with no DOM recording. Turn it off with `captureContent: false`.
+
+<Note>The pixel replaces the browser tracker in `@galya/sdk`. It sends the same batches to the same ingestion endpoint (`POST /v1/events`), so tagged pages keep working. `data-galya-type` becomes optional, and the heavy DOM snapshot is replaced by the light one above.</Note>
