@@ -37,7 +37,7 @@
           },
           {
             "group": "Concepts",
-            "pages": ["concepts/taste-schemas"]
+            "pages": ["concepts/taste-schemas", "concepts/galya-pixel"]
           },
           {
             "group": "Catalog",
