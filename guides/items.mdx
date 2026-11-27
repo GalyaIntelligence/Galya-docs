@@ -7,7 +7,11 @@ api: "POST /v1/item"
 An item is one thing you sell or show: a product, a variant, a video, a look. Send its text and image and Galya's model reads it into a [readout](/concepts/taste-schemas) for the call's schema. That readout is what ranking, search and filtering use.
 
 <ParamField body="schema" type="string | object" required>
-  A schema id (`galya-commerce-v3`, `sch_...`) or an inline [schema definition](/guides/schemas). The response's `schema_id` is the id it resolved to.
+  A schema id (a built-in such as `fashion` or `watches`, or your own `sch_...`) or an inline [schema definition](/guides/schemas). The response's `schema_id` is the id it resolved to.
+</ParamField>
+
+<ParamField body="overwrite" type="boolean" default="false">
+  Read the items again from scratch, every question answered afresh, even if nothing changed. By default Galya merges: unchanged items are left as they are, and new reads reuse answers the item already has.
 </ParamField>
 
 <ParamField body="items" type="object[]" required>
@@ -27,7 +31,7 @@ An item is one thing you sell or show: a product, a variant, a video, a look. Se
       Primary image the model reads (https or a data URI).
     </ParamField>
     <ParamField body="metadata" type="object">
-      Your fields, returned as-is and filterable with `metadata.<key>`. Set `product_id` to group variants of one product, so rankings don't fill up with them.
+      Your fields, returned as-is and filterable with `metadata.<key>`. Set `product_id` to group variants of one product.
     </ParamField>
     <ParamField body="readout" type="object">
       Supply a readout yourself and skip the model. See below.
@@ -42,7 +46,7 @@ curl https://api.galya.io/v1/item \
   -H "X-API-Key: $GALYA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "schema": "galya-commerce-v3",
+    "schema": "fashion",
     "items": [{
       "id": "sku_wrap_dress",
       "title": "Black wrap midi dress",
@@ -59,7 +63,7 @@ curl https://api.galya.io/v1/item \
 
 ```json 202
 {
-  "schema_id": "galya-commerce-v3",
+  "schema_id": "fashion",
   "items": [{ "id": "sku_wrap_dress", "status": "pending" }]
 }
 ```
@@ -76,13 +80,15 @@ The call returns `202` with each item's status for the schema:
 | `ready` | The readout is stored and current. The item ranks. |
 | `failed` | The model could not read it (`error` says why, e.g. `missing_content` when there is neither text nor image). Upsert it again to retry. |
 
-Track progress with `GET /v1/item?schema=galya-commerce-v3&status=pending`, or read one item with `GET /v1/item/{itemId}?schema=galya-commerce-v3`.
+Track progress with `GET /v1/item?schema=fashion&status=pending`, or read one item with `GET /v1/item/{itemId}?schema=fashion`.
 
-Upserting an item whose `text` and `image_url` have not changed does not read it again. Omitted fields are kept, so you can update `metadata` alone.
+Upserting an item whose `text` and `image_url` have not changed does not read it again. Omitted fields are kept, so you can update `metadata` alone, or send just `{ "id": ... }` to re-index an item Galya already has.
 
 ## One item, many schemas
 
 Upsert the same item with another schema and it gets a second readout; the first stays. `GET /v1/item/{itemId}` returns `readouts` keyed by schema id.
+
+Readouts merge: when an item is read under a schema, any of its questions the item already has an answer to (the same question and options, under another schema, from the same text and image) are reused, and only the new questions are asked. Send `"overwrite": true` to read every question again instead.
 
 ## Filter the catalog
 
@@ -91,7 +97,7 @@ Upsert the same item with another schema and it gets a second readout; the first
 ```bash
 curl -G https://api.galya.io/v1/item \
   -H "X-API-Key: $GALYA_API_KEY" \
-  --data-urlencode 'schema=galya-commerce-v3' \
+  --data-urlencode 'schema=fashion' \
   --data-urlencode 'where=product_family = "Dress" AND color IN ("Black", "Navy") AND metadata.vendor = "Acme"' \
   --data-urlencode 'include=readout'
 ```

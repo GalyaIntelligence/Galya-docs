@@ -1,0 +1,64 @@
+---
+title: Record natural-language interactions
+description: "Tell Galya what shoppers do, in plain words. Send each event once as it happens; Galya keeps the history, ignores retries, and updates taste on its own."
+---
+
+Every view, like, add to bag and purchase tells Galya something about a shopper. Record them as they happen with [`POST /v1/user`](/guides/users), in plain language. There's no event taxonomy to define and no history to manage.
+
+## Send events as they happen
+
+```bash
+curl https://api.galya.io/v1/user \
+  -H "X-API-Key: $GALYA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "shopper_1",
+    "schema": "fashion",
+    "interactions": [
+      { "id": "evt_9f1", "item_id": "sku_wrap_dress", "tag": "viewed", "dwell_ms": 12000, "context": { "surface": "collection" } },
+      { "id": "evt_9f2", "item_id": "sku_wrap_dress", "tag": "added to bag" }
+    ]
+  }'
+```
+
+- **Write the tag the way you'd say it:** `"liked"`, `"saved for later"`, `"added to bag"`, `"bought"`, `"skipped"`, `"watched 12s"`. Galya tells you how it understood each one (`read_as`) and keeps your words.
+- **Send only the new events.** Galya keeps the shopper's history; you never resend or rebuild it.
+- **Batch freely:** up to 500 interactions per call, from one page view or a whole session.
+- **Unknown shoppers are created on their first event.** There is no sign-up call.
+
+## What you don't need to worry about
+
+| Situation | What Galya does |
+| --- | --- |
+| A request is retried (timeouts, at-least-once delivery) | Interactions with an `id` it already has come back `duplicate` and aren't counted again. Always send an `id`. |
+| The same action on the same product, again (two views, two adds to bag) | Keeps it once, at its latest time and dwell, so a refresh doesn't inflate taste |
+| A different action on the same product (viewed, then bought) | Keeps both |
+| An event for a product Galya is still reading | Stored (`item_pending`); it counts as soon as the product is ready |
+| An event for a product Galya doesn't have | Not stored (`item_unknown`): [sync the product](/guides/sync-catalog) first |
+| Events arrive late or out of order | Send `at` with the time it happened; Galya orders history by time |
+| A tag Galya doesn't recognise yet | Stored as `other` with your words; it doesn't move taste yet |
+
+## Record and rank in one call
+
+Interactions in a call apply to that call's ranking. To record a click and reorder the next page in the same round trip, send both:
+
+```json
+{
+  "user_id": "shopper_1",
+  "schema": "fashion",
+  "interactions": [{ "id": "evt_9f3", "item_id": "sku_ankle_boot", "tag": "liked" }],
+  "rank": { "item_ids": ["sku_slip_skirt", "sku_linen_shirt", "sku_trench"], "limit": 3 }
+}
+```
+
+## Anonymous visitors who sign in
+
+Record a visitor under an anonymous id, such as a cookie or device id. When they sign in, pass that id in `merge_from` on the first call with their account id. Their history moves over once; nothing needs replaying.
+
+```json
+{ "user_id": "customer_8812", "merge_from": ["anon_5f2c"], "schema": "fashion" }
+```
+
+## Privacy
+
+`DELETE /v1/user/{userId}` erases a shopper, their interactions and their taste, for requests such as Shopify `customers/redact`.

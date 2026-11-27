@@ -9,7 +9,7 @@ You need a workspace and its secret key from [API keys](https://app.galya.io/api
 export GALYA_API_KEY="galya_sk_..."
 ```
 
-The example items are apparel, so every call below names `"schema": "galya-commerce-v3"`, the default schema for fashion and apparel. For travel, hospitality, tech, watches, trading cards or video games, pick that domain's schema from the [schema library](/guides/schema-library) instead, or [write your own questions](/guides/schemas).
+The example items are apparel, so every call below names `"schema": "fashion"`. For another domain, use its schema instead (`travel`, `hospitality`, `tech`, `watches`, `tradingcards` or `videogames`; see the [schema library](/guides/schema-library)), or [write your own questions](/guides/schemas).
 
 ## 1. Send items
 
@@ -20,7 +20,7 @@ curl https://api.galya.io/v1/item \
   -H "X-API-Key: $GALYA_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "schema": "galya-commerce-v3",
+    "schema": "fashion",
     "items": [
       {
         "id": "sku_wrap_dress",
@@ -43,7 +43,7 @@ The call returns `202` right away. The model reads each item in the background:
 
 ```json
 {
-  "schema_id": "galya-commerce-v3",
+  "schema_id": "fashion",
   "items": [
     { "id": "sku_wrap_dress", "status": "pending" },
     { "id": "sku_ankle_boot", "status": "pending" }
@@ -56,14 +56,14 @@ The call returns `202` right away. The model reads each item in the background:
 A readout usually lands within half a minute. List what is still pending:
 
 ```bash
-curl "https://api.galya.io/v1/item?schema=galya-commerce-v3&status=pending" \
+curl "https://api.galya.io/v1/item?schema=fashion&status=pending" \
   -H "X-API-Key: $GALYA_API_KEY"
 ```
 
 When the list is empty, every item is `ready`. To see what the model read for one item — a probability per option for each field, such as `color`, `silhouette` and `product_family` — fetch it:
 
 ```bash
-curl "https://api.galya.io/v1/item/sku_wrap_dress?schema=galya-commerce-v3" \
+curl "https://api.galya.io/v1/item/sku_wrap_dress?schema=fashion" \
   -H "X-API-Key: $GALYA_API_KEY"
 ```
 
@@ -77,7 +77,7 @@ curl https://api.galya.io/v1/user \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "shopper_1",
-    "schema": "galya-commerce-v3",
+    "schema": "fashion",
     "interactions": [
       { "id": "evt_1", "item_id": "sku_wrap_dress", "tag": "liked" }
     ],
@@ -89,7 +89,7 @@ curl https://api.galya.io/v1/user \
 ```json
 {
   "user_id": "shopper_1",
-  "schema_id": "galya-commerce-v3",
+  "schema_id": "fashion",
   "interactions": [
     { "id": "evt_1", "item_id": "sku_wrap_dress", "tag": "liked", "read_as": "like", "status": "recorded" }
   ],
@@ -113,7 +113,7 @@ curl https://api.galya.io/v1/user \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "shopper_1",
-    "schema": "galya-commerce-v3",
+    "schema": "fashion",
     "rank": { "item_ids": ["sku_ankle_boot", "sku_wrap_dress"], "limit": 2 }
   }'
 ```
